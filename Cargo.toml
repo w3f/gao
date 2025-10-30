@@ -1,0 +1,13 @@
+[package]
+name = "gao"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ark-std = { version = "0.5", default-features = false }
+ark-ff = { git = "https://github.com/arkworks-rs/algebra.git", default-features = false }
+ark-poly = { git = "https://github.com/arkworks-rs/algebra.git", default-features = false }
+ark-bls12-381 = { git = "https://github.com/arkworks-rs/algebra.git", default-features = false, features = ["curve"] }
+
+[features]
+print-trace = ["ark-std/print-trace"]
