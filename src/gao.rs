@@ -21,7 +21,7 @@ fn decode<F: FftField>(b: &[F], k: usize) -> Result<P<F>, String> {
     assert_eq!(g0.degree(), n);
 
     let d = (n + k) / 2;
-    let _t_gcd = start_timer!(|| format!("Half-GCD for normal degree sequences, deg = {d}"));
+    let _t_gcd = start_timer!(|| format!("Half-GCD for normal degree sequences, deg = {n}"));
     let B = simple_half_gcd(&g0, &g1, n - d);
     let (_, g) = B.apply(&g0, &g1);
     end_timer!(_t_gcd);
