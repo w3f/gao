@@ -14,7 +14,7 @@ pub fn d<F: Field>(f: &DensePolynomial<F>) -> DensePolynomial<F> {
     DensePolynomial::from_coefficients_vec(df_coeffs)
 }
 
-pub struct InterpolationDomain<F: Field> {
+pub struct InterpolationDomain<F: FftField> {
     us: Vec<F>,
     products: ProductTree<F>,
     weights: Vec<F>,
@@ -50,7 +50,7 @@ impl<F: FftField> InterpolationDomain<F> {
         let cs = self.weights.iter().zip(vs)
             .map(|(a, b)| *a * b)
             .collect::<Vec<_>>();
-        Self::linear_combination(&self.products.0[0..self.products.0.len() - 1], &cs)
+        Self::linear_combination(&self.products.child_polys(), &cs)
     }
 
     fn linear_combination(products: &[DensePolynomial<F>], cs: &[F]) -> Result<DensePolynomial<F>, ()> {

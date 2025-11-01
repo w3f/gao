@@ -10,8 +10,10 @@ fn z<F: Field>(u: F) -> DensePolynomial<F> {
     DensePolynomial::from_coefficients_slice(&[-u, F::one()]) // `= -u.0 + 1.X = X - u`
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Node<F: FftField>(pub DensePolynomial<F>, Option<Evaluations<F>>);
 
-pub struct ProductTree<F: Field>(pub Vec<DensePolynomial<F>>);
+pub struct ProductTree<F: FftField>(pub Vec<Node<F>>);
 
 impl<F: FftField> ProductTree<F> {
     // TODO: us should be distinct
@@ -19,12 +21,12 @@ impl<F: FftField> ProductTree<F> {
         let n = us.len();
         match n {
             0 => Err(()),
-            1 => Ok(Self(vec![z(us[0])])),
+            1 => Ok(Self(vec![Node(z(us[0]), None)])),
             _ => {
                 let h = n / 2;
                 let subtree_0 = Self::new(&us[0..h])?;
                 let subtree_1 = Self::new(&us[h..n])?;
-                let root = subtree_0.root() * subtree_1.root();
+                let root = mul_nodes(subtree_0.root_node(), subtree_1.root_node());
                 Ok(Self([
                     subtree_0.0,
                     subtree_1.0,
@@ -34,12 +36,25 @@ impl<F: FftField> ProductTree<F> {
         }
     }
 
-    pub fn root(&self) -> &DensePolynomial<F> {
-        &self.0[self.0.len() - 1]
+    fn split_root(&self) -> (&Node<F>, &[Node<F>]) {
+        self.0.split_last().unwrap()
+    }
+
+    pub fn root_node(&self) -> &Node<F> {
+        self.split_root().0
+    }
+
+    pub fn root(&self) -> &P<F> {
+        &self.root_node().0
+    }
+
+    pub fn child_polys(&self) -> Vec<P<F>> {
+        self.split_root().1.iter().map(|n| n.0.clone()).collect()
     }
 
     pub fn evaluate(&self, f: &DensePolynomial<F>) -> Result<Vec<F>, ()> {
-        Self::_evaluate(&self.0[0..self.0.len() - 1], f)
+        let child_nodes = self.child_polys();
+        Self::_evaluate(&child_nodes, f)
     }
 
     fn _evaluate(products: &[DensePolynomial<F>], f: &DensePolynomial<F>) -> Result<Vec<F>, ()> {
@@ -117,17 +132,30 @@ fn monic_interpolation<F: FftField>(p_evals: &Evaluations<F>) -> P<F> {
     f
 }
 
-struct Node<F: FftField>(DensePolynomial<F>, Evaluations<F>);
 fn mul_nodes<F: FftField>(a: &Node<F>, b: &Node<F>) -> Node<F> {
-    assert_eq!(a.0.degree(), b.0.degree());
-    assert_eq!(a.1.domain(), b.1.domain());
-    let n = a.1.domain().size();
+    let d = a.0.degree();
+    assert_eq!(b.0.degree(), d);
+
+    if d < 128 {
+        let c = a.0.naive_mul(&b.0);
+        return Node(c, None);
+    }
+
+    let n = d; // a monic degree `d` polynomials is uniquely defined by `d` evaluations
     let domain_2x = GeneralEvaluationDomain::<F>::new(2 * n).unwrap();
-    let a_evals_2x = double_evals(&a.0, &a.1);
-    let b_evals_2x = double_evals(&b.0, &b.1);
+
+    let a_evals_2x = match &a.1 {
+        Some(a_evals) => double_evals(&a.0, &a_evals),
+        None => a.0.evaluate_over_domain_by_ref(domain_2x),
+    };
+
+    let b_evals_2x = match &b.1 {
+        Some(b_evals) => double_evals(&b.0, &b_evals),
+        None => b.0.evaluate_over_domain_by_ref(domain_2x),
+    };
     let c_evals = &a_evals_2x * &b_evals_2x;
     let c = monic_interpolation(&c_evals);
-    Node(c, c_evals)
+    Node(c, Some(c_evals))
 }
 
 fn products<F: FftField>(xs: &[F]) -> Vec<DensePolynomial<F>> {
@@ -178,15 +206,6 @@ mod tests {
         let _t_product_tree = start_timer!(|| format!("Product tree, n = {n}"));
         let tree = ProductTree::new(&xs).unwrap();
         end_timer!(_t_product_tree);
-
-        let u = Fr::rand(&mut test_rng());
-        let mut m = z(u);
-        for d in 1..log_n + 1 {
-            let _t_mul = start_timer!(|| format!("Polynomial multiplication, d = {d}"));
-            m = &m * &m;
-            end_timer!(_t_mul);
-        }
-        assert_eq!(m.degree(), tree.root().degree());
     }
 
     // cargo test bench_subproduct_tree --release --features="print-trace" -- --ignored --show-output
@@ -194,7 +213,7 @@ mod tests {
     #[ignore]
     fn bench_subproduct_tree() {
         let log_n = 10;
-        _bench_subproduct_tree::<Fr>(log_n); // 8.546ms
+        _bench_subproduct_tree::<Fr>(log_n); // 8.546ms // 3.503ms
     }
 
     #[test]
@@ -247,7 +266,7 @@ mod tests {
         end_timer!(_t_fft);
 
         let _t_fft_doubling = start_timer!(|| format!("Doubling evals, n = {n}"));
-        let p_evals_2x_= double_evals(&p, &p_evals);
+        let p_evals_2x_ = double_evals(&p, &p_evals);
         end_timer!(_t_fft_doubling);
 
         assert_eq!(p_evals_2x_, p_evals_2x);
@@ -272,18 +291,16 @@ mod tests {
         let a_evals_2x = a.evaluate_over_domain_by_ref(domain_2x);
         let b_evals_2x = b.evaluate_over_domain_by_ref(domain_2x);
 
-
         let _t_smart_fft = start_timer!(|| format!("Smart mul, n = {n}"));
         let c_evals = &a_evals_2x * &b_evals_2x;
         let c = monic_interpolation(&c_evals);
-        let c_node = Node(c, c_evals);
+        let c_node = Node(c, Some(c_evals));
         end_timer!(_t_smart_fft);
 
         let _t_naive_fft = start_timer!(|| format!("Naive mul, n = {n}"));
-        let c_= &a * &b;
+        let c_ = &a * &b;
         end_timer!(_t_naive_fft);
 
         assert_eq!(c_, c_node.0);
-
     }
 }
