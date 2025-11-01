@@ -64,7 +64,7 @@ impl<F: FftField> ProductTree<F> {
     }
 }
 
-fn double_evals<F: FftField>(p: P<F>, evals: Evaluations<F>) -> Evaluations<F> {
+fn double_evals<F: FftField>(p: &P<F>, evals: &Evaluations<F>) -> Evaluations<F> {
     let n = evals.domain().size();
 
     // `(1, w, w^2, ..., w^{2n-1})`
@@ -88,7 +88,7 @@ fn double_evals<F: FftField>(p: P<F>, evals: Evaluations<F>) -> Evaluations<F> {
     end_timer!(_t_fft);
 
     // `evals2x` = `evals` interleaved with `evals_w`
-    let evals_2x: Vec<F> = evals.evals.into_iter()
+    let evals_2x: Vec<F> = evals.evals.iter().cloned()
         .zip(evals_w.evals)
         .flat_map(|(e1, e2)| vec![e1, e2])
         .collect();
@@ -96,7 +96,7 @@ fn double_evals<F: FftField>(p: P<F>, evals: Evaluations<F>) -> Evaluations<F> {
     evals_2x
 }
 
-fn monic_interpolation<F: FftField>(p_evals: Evaluations<F>) -> P<F> {
+fn monic_interpolation<F: FftField>(p_evals: &Evaluations<F>) -> P<F> {
     // Let `p` be a degree `d` monic polynomial.
     // Then `p(X) = X^d + f(X)`, where `deg(f) <= d-1`.
     // Then `f` can be interpolated using `d` evaluations.
@@ -104,9 +104,9 @@ fn monic_interpolation<F: FftField>(p_evals: Evaluations<F>) -> P<F> {
     // `f(xi) = vi - xi^d, i = 1,...,d`
     let d = p_evals.evals.len();
     let domain = p_evals.domain();
-    let f_evals = p_evals.evals.into_iter()
+    let f_evals = p_evals.evals.iter()
         .zip(domain.elements())
-        .map(|(vi, xi)| vi - xi.pow([d as u64]))
+        .map(|(vi, xi)| *vi - xi.pow([d as u64]))
         .collect::<Vec<_>>();
     let f_evals = Evaluations::from_vec_and_domain(f_evals, domain);
     let mut f = f_evals.interpolate();
@@ -117,6 +117,18 @@ fn monic_interpolation<F: FftField>(p_evals: Evaluations<F>) -> P<F> {
     f
 }
 
+struct Node<F: FftField>(DensePolynomial<F>, Evaluations<F>);
+fn mul_nodes<F: FftField>(a: &Node<F>, b: &Node<F>) -> Node<F> {
+    assert_eq!(a.0.degree(), b.0.degree());
+    assert_eq!(a.1.domain(), b.1.domain());
+    let n = a.1.domain().size();
+    let domain_2x = GeneralEvaluationDomain::<F>::new(2 * n).unwrap();
+    let a_evals_2x = double_evals(&a.0, &a.1);
+    let b_evals_2x = double_evals(&b.0, &b.1);
+    let c_evals = &a_evals_2x * &b_evals_2x;
+    let c = monic_interpolation(&c_evals);
+    Node(c, c_evals)
+}
 
 fn products<F: FftField>(xs: &[F]) -> Vec<DensePolynomial<F>> {
     let n = xs.len();
@@ -198,7 +210,7 @@ mod tests {
         assert!(p.coeffs[n].is_one());
         let p_evals = p.evaluate_over_domain_by_ref(domain);
 
-        let p_ = monic_interpolation(p_evals);
+        let p_ = monic_interpolation(&p_evals);
         assert_eq!(p_, p);
     }
 
@@ -213,7 +225,7 @@ mod tests {
         let p_evals = p.evaluate_over_domain_by_ref(domain);
         let p_evals_2x = p.evaluate_over_domain_by_ref(domain_2x);
 
-        let p_evals_2x_ = double_evals(p, p_evals);
+        let p_evals_2x_ = double_evals(&p, &p_evals);
         assert_eq!(p_evals_2x_, p_evals_2x);
     }
 
@@ -235,9 +247,43 @@ mod tests {
         end_timer!(_t_fft);
 
         let _t_fft_doubling = start_timer!(|| format!("Doubling evals, n = {n}"));
-        let p_evals_2x_= double_evals(p, p_evals);
+        let p_evals_2x_= double_evals(&p, &p_evals);
         end_timer!(_t_fft_doubling);
 
         assert_eq!(p_evals_2x_, p_evals_2x);
+    }
+
+    // cargo test bench_mul --release --features="print-trace" -- --ignored --show-output
+    #[test]
+    #[ignore]
+    fn bench_mul() {
+        let rng = &mut test_rng();
+
+        let log_n = 9;
+        let n = 2usize.pow(log_n);
+        let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
+        let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
+
+        let mut a = P::<Fr>::rand(n, rng);
+        let mut b = P::<Fr>::rand(n, rng);
+        a.coeffs[n] = Fr::one();
+        b.coeffs[n] = Fr::one();
+
+        let a_evals_2x = a.evaluate_over_domain_by_ref(domain_2x);
+        let b_evals_2x = b.evaluate_over_domain_by_ref(domain_2x);
+
+
+        let _t_smart_fft = start_timer!(|| format!("Smart mul, n = {n}"));
+        let c_evals = &a_evals_2x * &b_evals_2x;
+        let c = monic_interpolation(&c_evals);
+        let c_node = Node(c, c_evals);
+        end_timer!(_t_smart_fft);
+
+        let _t_naive_fft = start_timer!(|| format!("Naive mul, n = {n}"));
+        let c_= &a * &b;
+        end_timer!(_t_naive_fft);
+
+        assert_eq!(c_, c_node.0);
+
     }
 }
