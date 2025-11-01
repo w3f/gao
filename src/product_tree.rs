@@ -1,6 +1,7 @@
 use ark_ff::{FftField, Field};
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
 use ark_poly::{DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
+use ark_std::{end_timer, start_timer};
 use crate::P;
 
 /// The vanishing polynomial of `u`.
@@ -63,7 +64,7 @@ impl<F: FftField> ProductTree<F> {
     }
 }
 
-fn double_evals<F: FftField>(evals: Evaluations<F>) -> (Evaluations<F>, P<F>) {
+fn double_evals<F: FftField>(p: P<F>, evals: Evaluations<F>) -> Evaluations<F> {
     let n = evals.domain().size();
 
     // `(1, w, w^2, ..., w^{2n-1})`
@@ -72,7 +73,6 @@ fn double_evals<F: FftField>(evals: Evaluations<F>) -> (Evaluations<F>, P<F>) {
     // `(1, W, W^2, ..., W^{n-1}) = (1, w^2, ..., w^{2n-2})`
     let domain = evals.domain();
 
-    let p = evals.interpolate_by_ref();
     // The evaluations `(p(w), p(w^3), ..., p(w^{2n-1}))` are missing.
     // Consider a polynomial `pw(X) := p(w.X)`.
     // Then `(p(w), p(w^3), ..., p(w^{2n-1})) = (pw(1), pw(W), ..., pw(W^{n-1}))`.
@@ -82,7 +82,10 @@ fn double_evals<F: FftField>(evals: Evaluations<F>) -> (Evaluations<F>, P<F>) {
         .map(|(ci, wi)| wi * ci)
         .collect::<Vec<_>>();
     let pw = P::<F>::from_coefficients_vec(pw_coeffs);
+
+    let _t_fft = start_timer!(|| format!("FFT, n = {n}"));
     let evals_w = pw.evaluate_over_domain_by_ref(domain);
+    end_timer!(_t_fft);
 
     // `evals2x` = `evals` interleaved with `evals_w`
     let evals_2x: Vec<F> = evals.evals.into_iter()
@@ -90,8 +93,7 @@ fn double_evals<F: FftField>(evals: Evaluations<F>) -> (Evaluations<F>, P<F>) {
         .flat_map(|(e1, e2)| vec![e1, e2])
         .collect();
     let evals_2x = Evaluations::from_vec_and_domain(evals_2x, domain_2x);
-
-    (evals_2x, p)
+    evals_2x
 }
 
 fn monic_interpolation<F: FftField>(p_evals: Evaluations<F>) -> P<F> {
@@ -175,11 +177,11 @@ mod tests {
         assert_eq!(m.degree(), tree.root().degree());
     }
 
+    // cargo test bench_subproduct_tree --release --features="print-trace" -- --ignored --show-output
     #[test]
     #[ignore]
     fn bench_subproduct_tree() {
         let log_n = 10;
-        // cargo test bench_subproduct_tree --release --features="print-trace" -- --ignored --show-output
         _bench_subproduct_tree::<Fr>(log_n); // 8.546ms
     }
 
@@ -204,15 +206,38 @@ mod tests {
     fn test_fft_doubling() {
         let rng = &mut test_rng();
 
-        let n = 8;
+        let n = 10;
         let p = P::<Fr>::rand(n - 1, rng);
         let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
+        let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
+        let p_evals = p.evaluate_over_domain_by_ref(domain);
+        let p_evals_2x = p.evaluate_over_domain_by_ref(domain_2x);
+
+        let p_evals_2x_ = double_evals(p, p_evals);
+        assert_eq!(p_evals_2x_, p_evals_2x);
+    }
+
+    // cargo test bench_fft_doubling --release --features="print-trace" -- --ignored --show-output
+    #[test]
+    #[ignore]
+    fn bench_fft_doubling() {
+        let rng = &mut test_rng();
+
+        let log_n = 9;
+        let n = 2usize.pow(log_n);
+        let p = P::<Fr>::rand(n - 1, rng);
+        let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
+        let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
         let p_evals = p.evaluate_over_domain_by_ref(domain);
 
-        let (p_evals_2x, p_) = double_evals(p_evals);
-        assert_eq!(p_, p);
+        let _t_fft = start_timer!(|| format!("FFT, 2n = {}", 2 * n));
+        let p_evals_2x = p.evaluate_over_domain_by_ref(domain_2x);
+        end_timer!(_t_fft);
 
-        let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
-        assert_eq!(p_evals_2x, p.evaluate_over_domain_by_ref(domain_2x));
+        let _t_fft_doubling = start_timer!(|| format!("Doubling evals, n = {n}"));
+        let p_evals_2x_= double_evals(p, p_evals);
+        end_timer!(_t_fft_doubling);
+
+        assert_eq!(p_evals_2x_, p_evals_2x);
     }
 }
