@@ -138,15 +138,15 @@ mod tests {
     use ark_bls12_381::Fr;
     use ark_ff::{One, Zero};
     use ark_poly::univariate::DensePolynomial;
-    use ark_poly::{DenseUVPolynomial, EvaluationDomain};
-    use ark_std::{end_timer, start_timer, test_rng, UniformRand};
+    use ark_poly::DenseUVPolynomial;
+    use ark_std::{end_timer, start_timer, test_rng};
     use crate::gcd;
 
     #[test]
     fn truncation() {
         let rng = &mut test_rng();
         let d = 10;
-        let p = DensePolynomial::<Fr>::rand(10, rng);
+        let p = DensePolynomial::<Fr>::rand(d, rng);
         let (i, j) = (5, 8);
 
         let p_i = truncate_i(&p, i);

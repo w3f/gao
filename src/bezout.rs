@@ -68,8 +68,7 @@ mod tests {
     use super::*;
 
     use ark_bls12_381::Fr;
-    use ark_poly::EvaluationDomain;
-    use ark_std::{test_rng, UniformRand};
+    use ark_std::test_rng;
     use crate::div;
 
 

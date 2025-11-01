@@ -1,15 +1,11 @@
+use crate::product_tree::ProductTree;
 use ark_ff::{FftField, Field};
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, Polynomial};
-use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
+use ark_poly::univariate::DensePolynomial;
+use ark_poly::{DenseUVPolynomial, EvaluationDomain};
 use ark_std::{end_timer, start_timer};
 
-/// The vanishing polynomial of `u`.
-/// `z(X) = X - u`
-fn z<F: Field>(u: F) -> DensePolynomial<F> {
-    DensePolynomial::from_coefficients_slice(&[-u, F::one()]) // `-u.0 + 1.X = X - u`
-}
-
-fn d<F: Field>(f: &DensePolynomial<F>) -> DensePolynomial<F> {
+/// The formal derivative of `f`.
+pub fn d<F: Field>(f: &DensePolynomial<F>) -> DensePolynomial<F> {
     let df_coeffs = f.iter()
         .enumerate()
         .skip(1)
@@ -18,62 +14,9 @@ fn d<F: Field>(f: &DensePolynomial<F>) -> DensePolynomial<F> {
     DensePolynomial::from_coefficients_vec(df_coeffs)
 }
 
-pub struct SubproductTree<F: Field>(Vec<DensePolynomial<F>>);
-
-impl<F: FftField> SubproductTree<F> {
-    // TODO: us should be distinct
-    pub fn new(us: &[F]) -> Result<Self, ()> {
-        let n = us.len();
-        match n {
-            0 => Err(()),
-            1 => Ok(Self(vec![z(us[0])])),
-            _ => {
-                let h = n / 2;
-                let subtree_0 = Self::new(&us[0..h])?;
-                let subtree_1 = Self::new(&us[h..n])?;
-                let root = subtree_0.root() * subtree_1.root();
-                Ok(Self([
-                    subtree_0.0,
-                    subtree_1.0,
-                    vec![root]
-                ].concat()))
-            }
-        }
-    }
-
-    pub fn root(&self) -> &DensePolynomial<F> {
-        &self.0[self.0.len() - 1]
-    }
-
-    pub fn evaluate(&self, f: &DensePolynomial<F>) -> Result<Vec<F>, ()> {
-        Self::_evaluate(&self.0[0..self.0.len() - 1], f)
-    }
-
-    fn _evaluate(products: &[DensePolynomial<F>], f: &DensePolynomial<F>) -> Result<Vec<F>, ()> {
-        let d = f.degree();
-        if d == 0 {
-            return Ok(f.coeffs.clone());
-        }
-
-        let m = products.len();
-        // if m != 2 * d {
-        //     return Err(());
-        // }
-        let p: DenseOrSparsePolynomial<F> = f.into();
-        let (subtree_0, subtree_1) = products.split_at(m / 2);
-        let (root_0, products_0) = subtree_0.split_last().unwrap();
-        let (root_1, products_1) = subtree_1.split_last().unwrap();
-        let (_q0, r0) = p.divide_with_q_and_r(&root_0.into()).unwrap();
-        let (_q1, r1) = p.divide_with_q_and_r(&root_1.into()).unwrap();
-        let v0 = Self::_evaluate(products_0, &r0)?;
-        let v1 = Self::_evaluate(products_1, &r1)?;
-        Ok([v0, v1].concat())
-    }
-}
-
 pub struct InterpolationDomain<F: Field> {
     us: Vec<F>,
-    products: SubproductTree<F>,
+    products: ProductTree<F>,
     weights: Vec<F>,
 }
 
@@ -87,7 +30,7 @@ impl<F: FftField> InterpolationDomain<F> {
             .filter_map(|(ui, bi)| bi.then_some(ui))
             .collect::<Vec<_>>();
         let _t = start_timer!(|| "Subproduct tree");
-        let products = SubproductTree::new(&us)?;
+        let products = ProductTree::new(&us)?;
         end_timer!(_t);
         let dz = d(products.root());
         let dz_over_domain = dz.evaluate_over_domain(fft_domain);
@@ -134,9 +77,9 @@ impl<F: FftField> InterpolationDomain<F> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use ark_poly::GeneralEvaluationDomain;
     use ark_std::test_rng;
-    use super::*;
 
     fn _fast_interpolation<F: FftField>(n: usize) {
         let rng = &mut test_rng();

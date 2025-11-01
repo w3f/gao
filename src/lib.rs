@@ -5,13 +5,14 @@ mod gcd;
 mod bezout;
 mod half_gcd;
 mod gao;
+mod product_tree;
 
 use ark_ff::FftField;
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
 
 
-type P<F> = DensePolynomial<F>;
-type M<F> = [P<F>; 4];
+pub type P<F> = DensePolynomial<F>;
+pub type M<F> = [P<F>; 4];
 
 fn div<F: FftField>(p: &P<F>, q: &P<F>) -> (P<F>, P<F>) {
     let p = DenseOrSparsePolynomial::from(p);

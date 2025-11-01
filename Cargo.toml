@@ -9,5 +9,14 @@ ark-ff = { git = "https://github.com/arkworks-rs/algebra.git", default-features 
 ark-poly = { git = "https://github.com/arkworks-rs/algebra.git", default-features = false }
 ark-bls12-381 = { git = "https://github.com/arkworks-rs/algebra.git", default-features = false, features = ["curve"] }
 
+[dev-dependencies]
+criterion = "0.7"
+
+[[bench]]
+name = "product_tree"
+harness = false
+
 [features]
+parallel = ["ark-std/parallel", "ark-ff/parallel", "ark-poly/parallel"]
+asm = ["ark-ff/asm", "ark-bls12-381/asm"]
 print-trace = ["ark-std/print-trace"]
