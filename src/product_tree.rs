@@ -1,6 +1,6 @@
 use ark_ff::{FftField, Field};
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
-use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
 use crate::P;
 
 /// The vanishing polynomial of `u`.
@@ -63,11 +63,75 @@ impl<F: FftField> ProductTree<F> {
     }
 }
 
+fn double_evals<F: FftField>(evals: Evaluations<F>) -> (Evaluations<F>, P<F>) {
+    let n = evals.domain().size();
+
+    // `(1, w, w^2, ..., w^{2n-1})`
+    let domain_2x = GeneralEvaluationDomain::<F>::new(2 * n).unwrap();
+    // Let `W := w^2`
+    // `(1, W, W^2, ..., W^{n-1}) = (1, w^2, ..., w^{2n-2})`
+    let domain = evals.domain();
+
+    let p = evals.interpolate_by_ref();
+    // The evaluations `(p(w), p(w^3), ..., p(w^{2n-1}))` are missing.
+    // Consider a polynomial `pw(X) := p(w.X)`.
+    // Then `(p(w), p(w^3), ..., p(w^{2n-1})) = (pw(1), pw(W), ..., pw(W^{n-1}))`.
+    // `pw(X) = p(w.X) = p_0 + p_1(w.X) + ... + p_{n-1}(w.X)^{n-1} = p_0 + (p_1.w)X + ... + (p^{n-1}.w^{n-1})X^{n-1}`
+    let pw_coeffs = p.coeffs.iter() // `= (p_0, p_1, ..., p_{n-1})`
+        .zip(domain_2x.elements()) // ` = (1, w, ..., w^{n-1}, ..., w^{2n-1})`
+        .map(|(ci, wi)| wi * ci)
+        .collect::<Vec<_>>();
+    let pw = P::<F>::from_coefficients_vec(pw_coeffs);
+    let evals_w = pw.evaluate_over_domain_by_ref(domain);
+
+    // `evals2x` = `evals` interleaved with `evals_w`
+    let evals_2x: Vec<F> = evals.evals.into_iter()
+        .zip(evals_w.evals)
+        .flat_map(|(e1, e2)| vec![e1, e2])
+        .collect();
+    let evals_2x = Evaluations::from_vec_and_domain(evals_2x, domain_2x);
+
+    (evals_2x, p)
+}
+
+fn monic_interpolation<F: FftField>(p_evals: Evaluations<F>) -> P<F> {
+    // Let `p` be a degree `d` monic polynomial.
+    // Then `p(X) = X^d + f(X)`, where `deg(f) <= d-1`.
+    // Then `f` can be interpolated using `d` evaluations.
+    // `f(X) = p(X) - X^d`
+    // `f(xi) = vi - xi^d, i = 1,...,d`
+    let d = p_evals.evals.len();
+    let domain = p_evals.domain();
+    let f_evals = p_evals.evals.into_iter()
+        .zip(domain.elements())
+        .map(|(vi, xi)| vi - xi.pow([d as u64]))
+        .collect::<Vec<_>>();
+    let f_evals = Evaluations::from_vec_and_domain(f_evals, domain);
+    let mut f = f_evals.interpolate();
+
+    // p(X) = f(X) + X^d
+    f.coeffs.resize(d + 1, F::zero());
+    f.coeffs[d] = F::one();
+    f
+}
+
+
+fn products<F: FftField>(xs: &[F]) -> Vec<DensePolynomial<F>> {
+    let n = xs.len();
+    let mut products = Vec::with_capacity(2 * n - 1);
+    products.extend(xs.iter().map(|&xi| z(xi)));
+    for i in 0..n - 1 {
+        products.push(&products[2 * i] * &products[2 * i + 1])
+    }
+    products
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ark_bls12_381::Fr;
-    use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+    use ark_ff::{One, Zero};
+    use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain};
     use ark_std::{end_timer, start_timer, test_rng, UniformRand};
 
     #[test]
@@ -117,5 +181,38 @@ mod tests {
         let log_n = 10;
         // cargo test bench_subproduct_tree --release --features="print-trace" -- --ignored --show-output
         _bench_subproduct_tree::<Fr>(log_n); // 8.546ms
+    }
+
+    #[test]
+    fn test_monic_interpolation() {
+        let rng = &mut test_rng();
+
+        let n = 4;
+        let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
+        let xs = domain.elements().take(n).collect::<Vec<_>>();
+        let products = products(&xs);
+        let p = products[products.len() - 1].clone();
+        assert_eq!(p.degree(), n);
+        assert!(p.coeffs[n].is_one());
+        let p_evals = p.evaluate_over_domain_by_ref(domain);
+
+        let p_ = monic_interpolation(p_evals);
+        assert_eq!(p_, p);
+    }
+
+    #[test]
+    fn test_fft_doubling() {
+        let rng = &mut test_rng();
+
+        let n = 8;
+        let p = P::<Fr>::rand(n - 1, rng);
+        let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
+        let p_evals = p.evaluate_over_domain_by_ref(domain);
+
+        let (p_evals_2x, p_) = double_evals(p_evals);
+        assert_eq!(p_, p);
+
+        let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
+        assert_eq!(p_evals_2x, p.evaluate_over_domain_by_ref(domain_2x));
     }
 }
