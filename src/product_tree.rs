@@ -136,7 +136,7 @@ fn mul_nodes<F: FftField>(a: &Node<F>, b: &Node<F>) -> Node<F> {
     let d = a.0.degree();
     assert_eq!(b.0.degree(), d);
 
-    if d < 128 {
+    if d < 64 {
         let c = a.0.naive_mul(&b.0);
         return Node(c, None);
     }
@@ -213,7 +213,7 @@ mod tests {
     #[ignore]
     fn bench_subproduct_tree() {
         let log_n = 10;
-        _bench_subproduct_tree::<Fr>(log_n); // 8.546ms // 3.503ms
+        _bench_subproduct_tree::<Fr>(log_n); // 8.546ms // 3.360ms
     }
 
     #[test]
@@ -254,21 +254,29 @@ mod tests {
     fn bench_fft_doubling() {
         let rng = &mut test_rng();
 
-        let log_n = 9;
+        let log_n = 9; // as we end up with 2n evaluations
         let n = 2usize.pow(log_n);
         let p = P::<Fr>::rand(n - 1, rng);
         let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
         let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
-        let p_evals = p.evaluate_over_domain_by_ref(domain);
 
-        let _t_fft = start_timer!(|| format!("FFT, 2n = {}", 2 * n));
+        let _t_fft_x2 = start_timer!(|| format!("2n-FFT, n = {n}"));
         let p_evals_2x = p.evaluate_over_domain_by_ref(domain_2x);
-        end_timer!(_t_fft);
+        end_timer!(_t_fft_x2); // 108.542µs
+        println!();
 
-        let _t_fft_doubling = start_timer!(|| format!("Doubling evals, n = {n}"));
+
+        let _t_fft = start_timer!(|| format!("n-FFT + doubling, n = {n}"));
+        let p_evals = p.evaluate_over_domain_by_ref(domain);
         let p_evals_2x_ = double_evals(&p, &p_evals);
-        end_timer!(_t_fft_doubling);
+        end_timer!(_t_fft); // 125.250µs
+        println!();
+        assert_eq!(p_evals_2x_, p_evals_2x);
 
+        let _t_fft_doubling = start_timer!(|| format!("doubling precomputed n-FFT, n = {n}"));
+        let p_evals_2x_ = double_evals(&p, &p_evals);
+        end_timer!(_t_fft_doubling); // 70.916µs
+        println!();
         assert_eq!(p_evals_2x_, p_evals_2x);
     }
 
@@ -278,29 +286,45 @@ mod tests {
     fn bench_mul() {
         let rng = &mut test_rng();
 
-        let log_n = 9;
+        let log_n = 9; // as we end up with `deg(c) = 2n`
         let n = 2usize.pow(log_n);
-        let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
-        let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
 
+        // deg(a) = deg(b) = n
         let mut a = P::<Fr>::rand(n, rng);
         let mut b = P::<Fr>::rand(n, rng);
+        // but the polynomials are monic
         a.coeffs[n] = Fr::one();
         b.coeffs[n] = Fr::one();
 
+        let _t_naive_mul = start_timer!(|| format!("Naive mul, n = {n}"));
+        // uses FFTs of size `(2n + 1).next_power_of_two() = 4n`
+        let c_ = &a * &b;
+        end_timer!(_t_naive_mul); // 735.208µs
+        println!();
+
+        let _t_monic_mul = start_timer!(|| format!("Monic mul, n = {n}"));
+        // uses FFTs of size `2n` and that the polynomials are monic
+        let domain_2x = GeneralEvaluationDomain::<Fr>::new(2 * n).unwrap();
         let a_evals_2x = a.evaluate_over_domain_by_ref(domain_2x);
         let b_evals_2x = b.evaluate_over_domain_by_ref(domain_2x);
-
-        let _t_smart_fft = start_timer!(|| format!("Smart mul, n = {n}"));
         let c_evals = &a_evals_2x * &b_evals_2x;
         let c = monic_interpolation(&c_evals);
-        let c_node = Node(c, Some(c_evals));
-        end_timer!(_t_smart_fft);
+        end_timer!(_t_monic_mul); // 553.416µs
+        println!();
 
-        let _t_naive_fft = start_timer!(|| format!("Naive mul, n = {n}"));
-        let c_ = &a * &b;
-        end_timer!(_t_naive_fft);
+        let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
+        let a_evals = a.evaluate_over_domain_by_ref(domain);
+        let b_evals = b.evaluate_over_domain_by_ref(domain);
 
-        assert_eq!(c_, c_node.0);
+        // Assumes that `n`-evaluations of the multiplicands are known.
+        let _t_thrifty_mul = start_timer!(|| format!("Thrifty monic mul, n = {n}"));
+        let a_evals_2x_ = double_evals(&a, &a_evals);
+        let b_evals_2x_ = double_evals(&b, &b_evals);
+        let c_evals = &a_evals_2x * &b_evals_2x;
+        let c = monic_interpolation(&c_evals);
+        end_timer!(_t_thrifty_mul); // 487.292µs
+        println!();
+        assert_eq!(c, c_);
+        assert_eq!(c.degree(), 2 * n);
     }
 }

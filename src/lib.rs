@@ -25,7 +25,7 @@ mod tests {
     use ark_bls12_381::Fr;
     use ark_ff::{FftField, Zero};
     use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain};
-    use ark_std::{test_rng, UniformRand};
+    use ark_std::{end_timer, start_timer, test_rng, UniformRand};
     use crate::P;
     use ark_poly::Polynomial;
     use crate::product_tree::ProductTree;
@@ -43,6 +43,8 @@ mod tests {
         let us: Vec<Fr> = domain.elements().collect();
         let (t, c) = us.split_at(n / 2); // todo: shuffle
         let v_on_t = t.iter().map(|x| p.evaluate(x)).collect::<Vec<_>>();
+
+        let _t_v = start_timer!(|| format!("Interpolation: deg(p) = {}, |d| = {n}", n / 2 - 1));
         let tree = ProductTree::new(c).unwrap();
         let z = tree.root();
         let z_on_d = z.evaluate_over_domain_by_ref(domain).evals;
@@ -58,6 +60,7 @@ mod tests {
         let z_on_c = z.evaluate_over_domain_by_ref(coset);
         let v_on_c = &vz_on_c / &z_on_c;
         let v = v_on_c.interpolate();
+        end_timer!(_t_v);
         assert_eq!(p, v);
     }
 }
