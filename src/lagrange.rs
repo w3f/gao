@@ -32,7 +32,7 @@ impl<F: FftField> InterpolationDomain<F> {
         let _t = start_timer!(|| "Subproduct tree");
         let products = ProductTree::new(&us)?;
         end_timer!(_t);
-        let dz = d(products.root());
+        let dz = d(products.root_poly());
         let dz_over_domain = dz.evaluate_over_domain(fft_domain);
         let mut weights = dz_over_domain.evals.into_iter()
             .zip(bitmask)

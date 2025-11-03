@@ -6,6 +6,7 @@ mod bezout;
 mod half_gcd;
 mod gao;
 mod product_tree;
+mod poly_mul;
 
 use ark_ff::FftField;
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
@@ -46,7 +47,7 @@ mod tests {
 
         let _t_v = start_timer!(|| format!("Interpolation: deg(p) = {}, |d| = {n}", n / 2 - 1));
         let tree = ProductTree::new(c).unwrap();
-        let z = tree.root();
+        let z = tree.root_poly();
         let z_on_d = z.evaluate_over_domain_by_ref(domain).evals;
         let vz_on_t = v_on_t.iter()
             .zip(z_on_d)
