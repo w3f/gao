@@ -32,7 +32,7 @@ impl<F: FftField> Monic<F> {
 
     pub fn mul(a: &Monic<F>, b: &Monic<F>) -> Monic<F> {
         let d = a.poly.degree();
-        assert_eq!(b.poly.degree(), d);
+        // assert_eq!(b.poly.degree(), d);
 
         if d < 64 {
             let c = a.poly.naive_mul(&b.poly);

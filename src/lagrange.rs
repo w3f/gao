@@ -3,6 +3,7 @@ use ark_ff::{FftField, Field};
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::{DenseUVPolynomial, EvaluationDomain};
 use ark_std::{end_timer, start_timer};
+use crate::P;
 
 /// The formal derivative of `f`.
 pub fn d<F: Field>(f: &DensePolynomial<F>) -> DensePolynomial<F> {
@@ -15,7 +16,6 @@ pub fn d<F: Field>(f: &DensePolynomial<F>) -> DensePolynomial<F> {
 }
 
 pub struct InterpolationDomain<F: FftField> {
-    us: Vec<F>,
     products: ProductTree<F>,
     weights: Vec<F>,
 }
@@ -40,7 +40,6 @@ impl<F: FftField> InterpolationDomain<F> {
             .collect::<Vec<_>>();
         ark_ff::batch_inversion(&mut weights);
         Ok(Self {
-            us,
             products,
             weights,
         })
@@ -50,25 +49,22 @@ impl<F: FftField> InterpolationDomain<F> {
         let cs = self.weights.iter().zip(vs)
             .map(|(a, b)| *a * b)
             .collect::<Vec<_>>();
-        Self::linear_combination(&self.products.child_polys(), &cs)
+        let tree = self.products.unwrap_polys();
+        let (subtree_0, subtree_1, _) = ProductTree::split(&tree);
+        Self::linear_combination(&subtree_0, &subtree_1, &cs)
     }
 
-    fn linear_combination(products: &[DensePolynomial<F>], cs: &[F]) -> Result<DensePolynomial<F>, ()> {
+    fn linear_combination(subtree_0: &[P<F>], subtree_1: &[P<F>], cs: &[F]) -> Result<P<F>, ()> {
         let n = cs.len();
         match n {
             0 => Err(()),
             1 => Ok(DensePolynomial::from_coefficients_slice(cs)),
             _ => {
-                let m = products.len();
-                if m != 2 * (n - 1) {
-                    return Err(());
-                }
                 let (cs_0, cs_1) = cs.split_at(n / 2);
-                let (subtree_0, subtree_1) = products.split_at(m / 2);
-                let (root_0, products_0) = subtree_0.split_last().unwrap();
-                let (root_1, products_1) = subtree_1.split_last().unwrap();
-                let r0 = Self::linear_combination(products_0, cs_0)?;
-                let r1 = Self::linear_combination(products_1, cs_1)?;
+                let (subtree_00, subtree_01, root_0) = ProductTree::split(subtree_0);
+                let (subtree_10, subtree_11, root_1) = ProductTree::split(subtree_1);
+                let r0 = Self::linear_combination(subtree_00, subtree_01, cs_0)?;
+                let r1 = Self::linear_combination(subtree_10, subtree_11, cs_1)?;
                 Ok(root_1 * &r0 + root_0 * &r1)
             }
         }

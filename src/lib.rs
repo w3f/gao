@@ -1,12 +1,12 @@
 #![allow(non_snake_case)]
 
-mod lagrange;
+pub mod lagrange;
 mod gcd;
 mod bezout;
-mod half_gcd;
-mod gao;
-mod product_tree;
-mod poly_mul;
+pub mod half_gcd;
+pub mod gao;
+pub mod product_tree;
+pub mod poly_mul;
 
 use ark_ff::FftField;
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
@@ -26,7 +26,7 @@ mod tests {
     use ark_bls12_381::Fr;
     use ark_ff::{FftField, Zero};
     use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain};
-    use ark_std::{end_timer, start_timer, test_rng, UniformRand};
+    use ark_std::{end_timer, start_timer, test_rng};
     use crate::P;
     use ark_poly::Polynomial;
     use crate::product_tree::ProductTree;

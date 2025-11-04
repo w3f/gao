@@ -1,29 +1,34 @@
 use crate::poly_mul::Monic;
 use crate::P;
 use ark_ff::{FftField, Field};
-use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
+use ark_poly::univariate::{DenseOrSparsePolynomial};
 use ark_poly::{DenseUVPolynomial, Polynomial};
-use ark_std::{end_timer, start_timer};
 
-/// The vanishing polynomial of `u`.
+/// The vanishing polynomial of a point `x`.
 /// `z(X) = X - x`
-fn z<F: Field>(x: F) -> DensePolynomial<F> {
-    DensePolynomial::from_coefficients_slice(&[-x, F::one()]) // `= -x.0 + 1.X = X - u`
+fn z<F: Field>(x: F) -> P<F> {
+    P::from_coefficients_slice(&[-x, F::one()]) // `= -x.0 + 1.X = X - x`
 }
 
-pub fn products<F: FftField>(xs: &[F]) -> Vec<DensePolynomial<F>> {
-    let n = xs.len();
-    let mut products = Vec::with_capacity(2 * n - 1);
-    products.extend(xs.iter().map(|&xi| z(xi)));
-    for i in 0..n - 1 {
-        products.push(&products[2 * i] * &products[2 * i + 1])
-    }
-    products
-}
+/// Let `Z = [z_0, ..., z_{n-1}], z_i != z_j` for `i != j`.
+/// The tree is represented as an array, constructed recursively.
+///  If `n = 1`, `T([z_0]) = [z_0]`.
+///  Otherwise, let `h = n // 2`, `Z_L = [z_0, ..., z_{h-1}]`, and `Z_R = [z_h, ..., z_{n-1}]`.
+///  Then `T(Z) = T(Z_L) || T(Z_R) || [z_{h-1} * z_{n-1}]`.
+/// `len(T(Z)) = 2.len(Z) - 1`.
+///
+/// Consider a product tree `T = [t_0, ..., t_{m-1}]`.
+/// `m = len(T) = 2n - 1`, `n = (m + 1) / 2`, `h = n // 2`, `n_l = h`, `n_r = n - h`
+/// Therefore:
+/// * `root(T) := t_{m-1}`,
+/// * `len(T_L) = 2.n_l - 1`, so `T_L = [t_0,...,t_{2h-2}]`, and
+/// * `len(T_R) = 2.n_r - 1`, so `T_R = [t_{2h-1},...,t_{m-2}]`.
 
-pub fn z_of<F: FftField>(xs: &[F]) -> DensePolynomial<F> {
-    products(xs).last().unwrap().clone()
-}
+/// By the construction the tree is:
+/// 1. *full*, i.e. every inner node (not a leaf) has exactly `2` children,
+/// 2. somewhere between *balanced* and *complete* -- it may have gaps anywhere at the last row.
+
+/// The code below assumes that `z_i = z(x_i) = X - x_i` is a monic linear polynomial for any `i`.
 
 pub struct ProductTree<F: FftField>(pub Vec<Monic<F>>);
 
@@ -48,79 +53,117 @@ impl<F: FftField> ProductTree<F> {
         }
     }
 
-    fn split_root(&self) -> (&Monic<F>, &[Monic<F>]) {
-        self.0.split_last().unwrap()
+    pub(crate) fn unwrap_polys(&self) -> Vec<P<F>> {
+        self.0.iter()
+            .map(|m| m.poly.clone())
+            .collect()
+    }
+
+    // TODO: Should be smth like:
+    // fn split(&self) -> (&ProductTree<F>, &ProductTree<F>, &Monic<F>) {
+    pub(crate) fn split(tree: &[P<F>]) -> (&[P<F>], &[P<F>], &P<F>) {
+        let m = tree.len();
+        // println!("{m}");
+        if m == 1 {
+            return (&[], &[], &tree[0]);
+        }
+        let n = (m + 1) / 2;
+        let h = n / 2;
+        let m_l = 2 * h - 1; // nodes in the left subtree
+        let (root, children) = tree.split_last().unwrap();
+        let (subtree_l, subtree_r) = children.split_at(m_l);
+        (subtree_l, subtree_r, root)
     }
 
     pub fn root(&self) -> &Monic<F> {
-        self.split_root().0
+        self.0.split_last().unwrap().0
     }
 
     pub fn root_poly(&self) -> &P<F> {
         &self.root().poly
     }
 
-    pub fn child_polys(&self) -> Vec<P<F>> {
-        self.split_root().1.iter()
-            .map(|n| n.poly.clone())
-            .collect::<Vec<_>>()
+    pub fn evaluate(&self, f: &P<F>) -> Result<Vec<F>, ()> {
+        let tree = self.unwrap_polys();
+        let (subtree_0, subtree_1, _) = Self::split(&tree);
+        Self::_evaluate(&subtree_0, &subtree_1, f)
     }
 
-    pub fn evaluate(&self, f: &DensePolynomial<F>) -> Result<Vec<F>, ()> {
-        let child_nodes = self.child_polys();
-        Self::_evaluate(&child_nodes, f)
-    }
-
-    fn _evaluate(products: &[DensePolynomial<F>], f: &DensePolynomial<F>) -> Result<Vec<F>, ()> {
+    fn _evaluate(subtree_0: &[P<F>], subtree_1: &[P<F>], f: &P<F>) -> Result<Vec<F>, ()> {
         let d = f.degree();
         if d == 0 {
+            // the degree necessarily drops to `0`, as long as the corresponding leaf has degree `1`
             return Ok(f.coeffs.clone());
         }
-
-        let m = products.len();
-        // if m != 2 * d {
-        //     return Err(());
-        // }
         let p: DenseOrSparsePolynomial<F> = f.into();
-        let (subtree_0, subtree_1) = products.split_at(m / 2);
-        let (root_0, products_0) = subtree_0.split_last().unwrap();
-        let (root_1, products_1) = subtree_1.split_last().unwrap();
+        let (subtree_00, subtree_01, root_0) = Self::split(subtree_0);
+        let (subtree_10, subtree_11, root_1) = Self::split(subtree_1);
         let (_q0, r0) = p.divide_with_q_and_r(&root_0.into()).unwrap();
         let (_q1, r1) = p.divide_with_q_and_r(&root_1.into()).unwrap();
-        let v0 = Self::_evaluate(products_0, &r0)?;
-        let v1 = Self::_evaluate(products_1, &r1)?;
+        let v0 = Self::_evaluate(subtree_00, subtree_01, &r0)?;
+        let v1 = Self::_evaluate(subtree_10, subtree_11, &r1)?;
         Ok([v0, v1].concat())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ark_bls12_381::Fr;
     use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-    use ark_std::{end_timer, start_timer};
+    use ark_std::{end_timer, start_timer, test_rng};
 
-    #[test]
-    // n = 2^k
-    fn test_subproduct_tree() {
-        let log_n = 4;
-        let n = 2usize.pow(log_n);
-        let fft_domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
-        let xs = fft_domain.elements().collect::<Vec<_>>();
+    fn _product_tree<F: FftField>(n: usize) {
+        let rng = &mut test_rng();
+
+        let xs = (0..n).map(|_| F::rand(rng)).collect::<Vec<_>>();
         let tree = ProductTree::new(&xs).unwrap();
 
-        assert_eq!(*tree.root_poly(), fft_domain.vanishing_polynomial().into());
-        let products = tree.0;
-        let m = products.len();
-        assert_eq!(m, 2 * n - 1);
-        let xs_l = &xs[0..n / 2];
-        let xs_r = &xs[n / 2..n];
-        let h = (m - 1) / 2;
-        let products_l = &products[0..h];
-        let products_r = &products[h..m - 1]; // skip the root
-        assert_eq!(products_l, ProductTree::new(&xs_l).unwrap().0);
-        assert_eq!(products_r, ProductTree::new(&xs_r).unwrap().0);
+        let tree = tree.unwrap_polys();
+        assert_eq!(tree.len(), 2 * n - 1);
+
+        let (subtree_0, subtree_1, root) = ProductTree::split(&tree);
+        assert_eq!(root.degree(), n);
+
+        if n == 1 {
+            return;
+        }
+
+        let h = n / 2;
+        let xs_l = &xs[0..h];
+        let xs_r = &xs[h..n];
+        let tree_l = ProductTree::new(&xs_l).unwrap();
+        let tree_r = ProductTree::new(&xs_r).unwrap();
+        assert_eq!(subtree_0, tree_l.unwrap_polys());
+        assert_eq!(subtree_1, tree_r.unwrap_polys());
+    }
+
+    #[test]
+    fn product_tree() {
+        for n in [1, 2, 3, 4, 15, 16, 17] {
+            _product_tree::<Fr>(n);
+        }
+    }
+
+    fn _multipoint_evaluation<F: FftField>(n: usize) {
+        let rng = &mut test_rng();
+
+        let fft_domain = GeneralEvaluationDomain::<F>::new(n).unwrap();
+        let xs = fft_domain.elements().take(n).collect::<Vec<_>>();
+        let tree = ProductTree::new(&xs).unwrap();
+
+        let p = P::<F>::rand(n - 1, rng);
+
+        let vs = tree.evaluate(&p).unwrap();
+        let vs_ = p.evaluate_over_domain_by_ref(fft_domain).evals;
+        assert_eq!(vs, vs_[0..n].to_vec());
+    }
+
+    #[test]
+    fn multipoint_evaluation() {
+        for n in [1, 2, 3, 4, 15, 16, 17] {
+            _multipoint_evaluation::<Fr>(n);
+        }
     }
 
     fn _bench_product_tree<F: FftField>(log_n: u32) {
@@ -129,7 +172,7 @@ mod tests {
         let xs = fft_domain.elements().collect::<Vec<_>>();
 
         let _t_product_tree = start_timer!(|| format!("Product tree, n = {n}"));
-        let tree = ProductTree::new(&xs).unwrap();
+        let _tree = ProductTree::new(&xs).unwrap();
         end_timer!(_t_product_tree);
     }
 

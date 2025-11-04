@@ -6,7 +6,7 @@ use ark_poly::EvaluationDomain;
 use ark_poly::{GeneralEvaluationDomain, Polynomial};
 use ark_std::{end_timer, start_timer};
 
-fn decode<F: FftField>(b: &[F], k: usize) -> Result<P<F>, String> {
+pub fn decode<F: FftField>(b: &[F], k: usize) -> Result<P<F>, String> {
     let n = b.len();
 
     let _t_interpolate = start_timer!(|| format!("Interpolation, n = {n}"));

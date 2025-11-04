@@ -172,12 +172,12 @@ mod tests {
         let B1_ = BezoutMatrix::new(&r0_88, &r1_88).unwrap();
         assert_eq!(B1_, B1);
 
-        let r2 = B1.next_remainder(&r0, &r1);
-        let B2 = BezoutMatrix::new(&r1, &r2).unwrap();
-        let r3 = B2.next_remainder(&r1, &r2);
-        let B3 = BezoutMatrix::new(&r2, &r3).unwrap();
-
-        let B14 = B3.compose(&B2.compose(&B1));
+        // let r2 = B1.next_remainder(&r0, &r1);
+        // let B2 = BezoutMatrix::new(&r1, &r2).unwrap();
+        // let r3 = B2.next_remainder(&r1, &r2);
+        // let B3 = BezoutMatrix::new(&r2, &r3).unwrap();
+        //
+        // let B14 = B3.compose(&B2.compose(&B1));
     }
 
     #[test]

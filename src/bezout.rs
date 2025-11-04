@@ -71,7 +71,6 @@ mod tests {
     use ark_std::test_rng;
     use crate::div;
 
-
     #[test]
     fn test_bezout_matrices() {
         let rng = &mut test_rng();
