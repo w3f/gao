@@ -11,6 +11,7 @@ pub mod poly_mul;
 use ark_ff::FftField;
 use ark_poly::{EvaluationDomain, Evaluations, Polynomial, Radix2EvaluationDomain};
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
+use ark_std::{end_timer, start_timer};
 use crate::product_tree::ProductTree;
 
 pub type P<F> = DensePolynomial<F>;
@@ -52,82 +53,91 @@ pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, 
 
     let mut f_on_d = vec![None; d];
     for (i, vi) in f_on_s {
-        f_on_d[*i] = Some(vi);
+        f_on_d[*i] = Some(*vi);
     }
 
     let mut ws = domain.elements();
-    let mut complement: Vec<F> = ws.by_ref()
+    let mut c: Vec<F> = ws.by_ref()
         .take(n)
         .enumerate()
         .filter_map(|(i, wi)| f_on_d[i].is_none().then_some(wi))
         .collect();
-    debug_assert_eq!(complement.len(), n - s);
-    complement.extend(ws); // TODO: precompute the tree
-    debug_assert_eq!(complement.len(), d - s);
+    debug_assert_eq!(c.len(), n - s);
+    c.extend(ws); // TODO: precompute the tree
+    debug_assert_eq!(c.len(), d - s);
 
     // 1. Compute `z_c` - the vanishing polynomial of `{w_i|i in C}`.
-    let tree_on_c = ProductTree::new(&complement).unwrap();
+    let _t_zc = start_timer!(|| format!("z_C, deg(z_C) = {}", d - s));
+    let tree_on_c = ProductTree::new(&c).unwrap();
+    end_timer!(_t_zc);
     let zc = tree_on_c.root_poly();
     debug_assert_eq!(zc.degree(), d - s);
 
     // 2. Evaluate `z_c` over the domain using an FFT.
+    let _t_zc_on_d = start_timer!(|| format!("Evaluate z_C over D, {d}-FFT"));
     let zc_on_d = zc.evaluate_over_domain_by_ref(domain).evals;
+    end_timer!(_t_zc_on_d);
+
     // 3. Compute `f * z_c` in evaluation form.
-    let f_zc_on_d: Vec<F> = f_on_d.into_iter()
+    let f_zc_on_d: Vec<F> = f_on_d.iter()
+        .cloned()
         .zip(zc_on_d)
         .map(|(vi, zi)| {
             match vi {
-                Some(vi) => zi * vi,
+                Some(vi) => vi * zi,
                 None => F::zero()
             }
         }).collect();
     let f_zc_on_d = Evaluations::from_vec_and_domain(f_zc_on_d, domain);
     // 4. Interpolate `f * z_c`.
+    let _t_f_zc = start_timer!(|| format!("Interpolate f.z_C, {d}-iFFT"));
     let f_zc = f_zc_on_d.interpolate();
+    end_timer!(_t_f_zc);
+
+    let t_option_1 = start_timer!(|| "Option №1");
     // 5. Evaluate `f * z_c` and `z_c` over a coset of the domain.
     let coset = domain.get_coset(F::GENERATOR).unwrap();
     let f_zc_on_coset = f_zc.evaluate_over_domain_by_ref(coset);
     let zc_on_coset = zc.evaluate_over_domain_by_ref(coset);
     // 6. Compute `f = (f * z_c) / z_c` over the coset in the evaluation form and interpolate it.
     let f_on_coset = &f_zc_on_coset / &zc_on_coset;
-    f_on_coset.interpolate()
+    let f1 = f_on_coset.interpolate();
+    end_timer!(t_option_1);
+
+    let t_option_2 = start_timer!(|| "Option №2");
+    let d_zc = lagrange::d(&zc);
+    let d_zc_on_d = d_zc.evaluate_over_domain_by_ref(domain);
+    let d_f_zc = lagrange::d(&f_zc);
+    let d_f_zc_on_d = d_f_zc.evaluate_over_domain_by_ref(domain);
+    let f_on_c = &d_f_zc_on_d / &d_zc_on_d;
+    let mut f_on_d = f_on_d;
+    for i in 0..d {
+        match f_on_d[i] {
+            None => f_on_d[i] = Some(f_on_c.evals[i]),
+            Some(_) => {},
+        }
+    }
+    let f_on_d: Vec<F> = f_on_d.into_iter().flatten().collect();
+    debug_assert_eq!(f_on_d.len(), d);
+    let f_on_d = Evaluations::from_vec_and_domain(f_on_d, domain);
+    let f2 = f_on_d.interpolate();
+    debug_assert_eq!(f1, f2);
+    end_timer!(t_option_2);
+    f2
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
     use ark_bls12_381::Fr;
-    use ark_ff::{FftField, Zero};
-    use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain, Radix2EvaluationDomain};
+    use ark_ff::FftField;
+    use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
     use ark_std::{end_timer, rand, start_timer, test_rng};
     use crate::{interpolation_a_la_al, P};
     use ark_poly::Polynomial;
-    use crate::product_tree::ProductTree;
     use ark_poly::DenseUVPolynomial;
     use ark_std::iterable::Iterable;
     use rand::Rng;
     use ark_std::rand::prelude::SliceRandom;
-
-
-    // d - domain.size()
-    // max_us - maximal number of evaluation points, max_us <= d
-    // n_vs - number of alleged evaluations, n_vs <= max_us
-    fn split_domain<R: Rng>(d: usize, max_us: usize, n_vs: usize, rng: &mut R) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
-        assert!(max_us <= d);
-        let is: Vec<usize> = (0..d).collect();
-        let (us, not_us) = is.split_at(max_us);
-        let mut us = us.to_vec();
-        us.shuffle(rng);
-        assert!(n_vs <= max_us);
-        let (us_with_v, us_no_v) = us.split_at(n_vs);
-        let mut us_with_v = us_with_v.to_vec();
-        us_with_v.sort();
-        let mut us_no_v = us_no_v.to_vec();
-        us_no_v.sort();
-        assert_eq!(us_with_v.len() + us_no_v.len(), d - not_us.len());
-        (us_with_v, us_no_v, not_us.to_vec())
-    }
-
 
     fn _test_interpolation_a_la_al<F: FftField>(n: usize, t: usize) {
         let rng = &mut test_rng();
@@ -149,10 +159,13 @@ mod tests {
             .map(|&i| (i, f.evaluate(&ws[i])))
             .collect();
 
+        let _t = start_timer!(|| format!("Interpolation, (n, t) = ({n},{t})"));
         let f_ = interpolation_a_la_al(n, t, &f_on_S);
         assert_eq!(f_, f);
+        end_timer!(_t);
     }
 
+    // cargo test test_interpolation_a_la_al --release --features="print-trace" -- --show-output
     #[test]
     fn test_interpolation_a_la_al() {
         _test_interpolation_a_la_al::<Fr>(1000, 667);
