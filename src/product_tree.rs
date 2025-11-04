@@ -113,29 +113,24 @@ mod tests {
     use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
     use ark_std::{end_timer, start_timer, test_rng};
 
+    fn check_tree<F: FftField>(tree: &[P<F>], n: usize) {
+        assert_eq!(tree.len(), 2 * n - 1);
+        let (subtree_0, subtree_1, root) = ProductTree::split(&tree);
+        assert_eq!(root.degree(), n);
+        if n == 1 {
+            return;
+        }
+        let h = n / 2;
+        check_tree(subtree_0, h);
+        check_tree(subtree_1, n - h);
+    }
+
     fn _product_tree<F: FftField>(n: usize) {
         let rng = &mut test_rng();
 
         let xs = (0..n).map(|_| F::rand(rng)).collect::<Vec<_>>();
         let tree = ProductTree::new(&xs).unwrap();
-
-        let tree = tree.unwrap_polys();
-        assert_eq!(tree.len(), 2 * n - 1);
-
-        let (subtree_0, subtree_1, root) = ProductTree::split(&tree);
-        assert_eq!(root.degree(), n);
-
-        if n == 1 {
-            return;
-        }
-
-        let h = n / 2;
-        let xs_l = &xs[0..h];
-        let xs_r = &xs[h..n];
-        let tree_l = ProductTree::new(&xs_l).unwrap();
-        let tree_r = ProductTree::new(&xs_r).unwrap();
-        assert_eq!(subtree_0, tree_l.unwrap_polys());
-        assert_eq!(subtree_1, tree_r.unwrap_polys());
+        check_tree(&tree.unwrap_polys(), n);
     }
 
     #[test]
