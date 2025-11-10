@@ -1,6 +1,6 @@
 use crate::P;
 use ark_ff::{FftField, Field};
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
+use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
 use ark_std::{end_timer, start_timer};
 
 #[derive(Clone, Debug, PartialEq)]
