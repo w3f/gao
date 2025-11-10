@@ -1,6 +1,6 @@
+use crate::{M, P};
 use ark_ff::{FftField, Field, Zero};
 use ark_poly::{DenseUVPolynomial, Polynomial};
-use crate::{M, P};
 
 /// Represents a Bezout matrix `B_i` or a composition of Bezout matrices `B_ij = B_{j-1}*...*B_i`.
 #[derive(Debug, PartialEq)] // todo
@@ -20,7 +20,7 @@ impl<F: FftField> BezoutMatrix<F> {
             P::zero(),
             P::from_coefficients_vec(vec![F::one()]),
             P::from_coefficients_vec(vec![F::one()]),
-            minus_q
+            minus_q,
         ]))
     }
 
@@ -29,7 +29,7 @@ impl<F: FftField> BezoutMatrix<F> {
             P::from_coefficients_vec(vec![F::one()]),
             P::zero(),
             P::zero(),
-            P::from_coefficients_vec(vec![F::one()])
+            P::from_coefficients_vec(vec![F::one()]),
         ])
     }
 
@@ -67,9 +67,9 @@ impl<F: FftField> BezoutMatrix<F> {
 mod tests {
     use super::*;
 
+    use crate::div;
     use ark_bls12_381::Fr;
     use ark_std::test_rng;
-    use crate::div;
 
     #[test]
     fn test_bezout_matrices() {
@@ -93,6 +93,9 @@ mod tests {
         assert_eq!(r2_, r2);
         assert_eq!(r3_, r3);
         assert_eq!(B13.degree(), 2);
-        assert_eq!(B13.degree(), B13.0.iter().map(|p| p.degree()).max().unwrap());
+        assert_eq!(
+            B13.degree(),
+            B13.0.iter().map(|p| p.degree()).max().unwrap()
+        );
     }
 }

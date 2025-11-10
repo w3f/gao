@@ -1,7 +1,7 @@
 use crate::poly_mul::Monic;
 use crate::P;
 use ark_ff::{FftField, Field};
-use ark_poly::univariate::{DenseOrSparsePolynomial};
+use ark_poly::univariate::DenseOrSparsePolynomial;
 use ark_poly::{DenseUVPolynomial, Polynomial};
 
 /// The vanishing polynomial of a point `x`.
@@ -44,19 +44,13 @@ impl<F: FftField> ProductTree<F> {
                 let subtree_0 = Self::new(&xs[0..h])?;
                 let subtree_1 = Self::new(&xs[h..n])?;
                 let root = Monic::mul(subtree_0.root(), subtree_1.root());
-                Ok(Self([
-                    subtree_0.0,
-                    subtree_1.0,
-                    vec![root]
-                ].concat()))
+                Ok(Self([subtree_0.0, subtree_1.0, vec![root]].concat()))
             }
         }
     }
 
     pub(crate) fn unwrap_polys(&self) -> Vec<P<F>> {
-        self.0.iter()
-            .map(|m| m.poly.clone())
-            .collect()
+        self.0.iter().map(|m| m.poly.clone()).collect()
     }
 
     // TODO: Should be smth like:

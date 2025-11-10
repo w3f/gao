@@ -17,7 +17,10 @@ impl<F: FftField> Monic<F> {
     pub fn with_evals(poly: P<F>, evals: Evaluations<F>) -> Self {
         debug_assert_eq!(evals.evals.len(), evals.domain().size());
         debug_assert!(poly.degree() <= evals.domain().size());
-        Self { poly, evals: Some(evals) }
+        Self {
+            poly,
+            evals: Some(evals),
+        }
     }
 
     pub fn evals_for(&self, product_degree: usize) -> Evaluations<F> {
@@ -36,7 +39,8 @@ impl<F: FftField> Monic<F> {
         debug_assert!(a_degree.abs_diff(b_degree) <= 1);
         let c_degree = a_degree + b_degree;
 
-        if c_degree < 128 { // TODO
+        if c_degree < 128 {
+            // TODO
             let c = a.poly.naive_mul(&b.poly);
             return Self::new(c);
         }
@@ -76,7 +80,8 @@ pub fn double_evals<F: FftField>(p: &P<F>, p_evals: &Evaluations<F>) -> Evaluati
 
 pub fn interleave<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
     debug_assert_eq!(a.len(), b.len());
-    a.iter().cloned()
+    a.iter()
+        .cloned()
         .zip(b.iter().cloned())
         .flat_map(|(ai, bi)| vec![ai, bi])
         .collect::<Vec<_>>()

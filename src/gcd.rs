@@ -1,6 +1,6 @@
+use crate::P;
 use ark_ff::{FftField, Zero};
 use ark_poly::{DenseUVPolynomial, Polynomial};
-use crate::P;
 
 /// For a pair of polynomials `(f, g)`, computes their greatest common divisor `gcd(f, g)`
 /// and their Bézout coefficients, i.e. a pair of polynomials `(s, t)` such that `sf + tg = gcd(f,g)`,
@@ -10,7 +10,7 @@ use crate::P;
 pub fn euclid<F: FftField>(f: &P<F>, g: &P<F>) -> (P<F>, P<F>, P<F>) {
     let mut r0 = f.clone();
     let mut r1 = g.clone();
-    let (mut s0, mut s1) = (P::from_coefficients_slice(&[F::one()]),  P::zero());
+    let (mut s0, mut s1) = (P::from_coefficients_slice(&[F::one()]), P::zero());
     let (mut t0, mut t1) = (P::zero(), P::from_coefficients_slice(&[F::one()]));
 
     // while (k.is_some() && r0.degree() >= k.unwrap()) || (k.is_none() && !r1.is_zero()) {

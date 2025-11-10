@@ -1,13 +1,14 @@
 use crate::product_tree::ProductTree;
+use crate::P;
 use ark_ff::{FftField, Field};
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::{DenseUVPolynomial, EvaluationDomain};
 use ark_std::{end_timer, start_timer};
-use crate::P;
 
 /// The formal derivative of `f`.
 pub fn d<F: Field>(f: &DensePolynomial<F>) -> DensePolynomial<F> {
-    let df_coeffs = f.iter()
+    let df_coeffs = f
+        .iter()
         .enumerate()
         .skip(1)
         .map(|(i, ci)| F::from(i as u32) * ci)
@@ -21,11 +22,15 @@ pub struct InterpolationDomain<F: FftField> {
 }
 
 impl<F: FftField> InterpolationDomain<F> {
-    pub fn from_subset<D: EvaluationDomain<F>>(fft_domain: D, bitmask: &[bool]) -> Result<Self, ()> {
+    pub fn from_subset<D: EvaluationDomain<F>>(
+        fft_domain: D,
+        bitmask: &[bool],
+    ) -> Result<Self, ()> {
         if fft_domain.size() != bitmask.len() {
             return Err(());
         }
-        let us = fft_domain.elements()
+        let us = fft_domain
+            .elements()
             .zip(bitmask)
             .filter_map(|(ui, bi)| bi.then_some(ui))
             .collect::<Vec<_>>();
@@ -34,19 +39,21 @@ impl<F: FftField> InterpolationDomain<F> {
         end_timer!(_t);
         let dz = d(products.root_poly());
         let dz_over_domain = dz.evaluate_over_domain(fft_domain);
-        let mut weights = dz_over_domain.evals.into_iter()
+        let mut weights = dz_over_domain
+            .evals
+            .into_iter()
             .zip(bitmask)
             .filter_map(|(dz_in_ui, bi)| bi.then_some(dz_in_ui))
             .collect::<Vec<_>>();
         ark_ff::batch_inversion(&mut weights);
-        Ok(Self {
-            products,
-            weights,
-        })
+        Ok(Self { products, weights })
     }
 
     pub fn interpolate(&self, vs: &[F]) -> Result<DensePolynomial<F>, ()> {
-        let cs = self.weights.iter().zip(vs)
+        let cs = self
+            .weights
+            .iter()
+            .zip(vs)
             .map(|(a, b)| *a * b)
             .collect::<Vec<_>>();
         let tree = self.products.unwrap_polys();

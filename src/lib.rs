@@ -1,13 +1,13 @@
 #![allow(non_snake_case)]
 
-pub mod lagrange;
-mod gcd;
 mod bezout;
-pub mod half_gcd;
 pub mod gao;
-pub mod product_tree;
-pub mod poly_mul;
+mod gcd;
+pub mod half_gcd;
 pub mod interpolation;
+pub mod lagrange;
+pub mod poly_mul;
+pub mod product_tree;
 
 use ark_ff::FftField;
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
@@ -21,6 +21,4 @@ fn div<F: FftField>(p: &P<F>, q: &P<F>) -> (P<F>, P<F>) {
 }
 
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

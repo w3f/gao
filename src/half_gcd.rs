@@ -1,8 +1,8 @@
+use crate::bezout::BezoutMatrix;
 use crate::P;
 use ark_ff::{FftField, Field, Zero};
-use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_poly::univariate::DensePolynomial;
-use crate::bezout::BezoutMatrix;
+use ark_poly::{DenseUVPolynomial, Polynomial};
 
 /// For a degree `d` polynomial `p` removes its `i < d + 1` lower coefficients
 /// and returns a polynomial of degree `d - i` retaining `d - i + 1` higher coefficients.
@@ -38,7 +38,11 @@ fn truncate_pair<F: Field>(p: &P<F>, q: &P<F>, k: usize) -> (P<F>, P<F>) {
 }
 
 /// Works for "normal degree sequences" only.
-pub fn simple_half_gcd<F: FftField>(p: &DensePolynomial<F>, q: &DensePolynomial<F>, k: usize) -> BezoutMatrix<F> {
+pub fn simple_half_gcd<F: FftField>(
+    p: &DensePolynomial<F>,
+    q: &DensePolynomial<F>,
+    k: usize,
+) -> BezoutMatrix<F> {
     let d = p.degree();
     // println!("k = {k}, deg(P) = {d}, deg(Q) = {}", q.degree());
     assert!(k <= d && k > 0);
@@ -57,11 +61,11 @@ pub fn simple_half_gcd<F: FftField>(p: &DensePolynomial<F>, q: &DensePolynomial<
     // println!("deg(P1) = {}, deg(Q1) = {}", p1.degree(), q1.degree());
     let m1 = simple_half_gcd(&p1, &q1, h1); // `= B_{1; h1+1}(p, q)`
     let (p2, q2) = m1.apply(&p, &q); // `= B_{1; h1+1} * A_1 = A_{h1+1} = (r_h1, r_{h1+1})`
-    // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
-    // assert_eq!(p2.degree(), d - h1); // `deg(r_i) = d - i`
+                                     // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
+                                     // assert_eq!(p2.degree(), d - h1); // `deg(r_i) = d - i`
     let (p2, q2) = truncate_pair(&p2, &q2, h2);
     let m2 = simple_half_gcd(&p2, &q2, h2); // `= B_{1; h2+1}(p2, q2)
-    // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
+                                            // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
     m2.compose(&m1)
     //`B_{h1+1; k+1}(p, q) * B_{1; h1+1}(p, q) = B_{1; k+1}(p, q)`
 }
@@ -135,12 +139,12 @@ pub fn simple_half_gcd<F: FftField>(p: &DensePolynomial<F>, q: &DensePolynomial<
 mod tests {
     use super::*;
     use crate::bezout::BezoutMatrix;
+    use crate::gcd;
     use ark_bls12_381::Fr;
     use ark_ff::{One, Zero};
     use ark_poly::univariate::DensePolynomial;
     use ark_poly::DenseUVPolynomial;
     use ark_std::{end_timer, start_timer, test_rng};
-    use crate::gcd;
 
     #[test]
     fn truncation() {

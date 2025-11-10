@@ -25,8 +25,7 @@ use ark_std::{end_timer, start_timer};
 // 4. Interpolate `f * z_c`. // `d-FFT`
 // 5. Evaluate `f * z_c` and `z_c` over a coset of the domain. // `2 x d-FFT`
 // 6. Compute `f = (f * z_c) / z_c` over the coset in the evaluation form and interpolate it. // `d-FFT`
-pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, F)]) -> P<F>
-{
+pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, F)]) -> P<F> {
     debug_assert!(0 < t);
     let s = f_on_s.len();
     debug_assert!(t <= s);
@@ -41,7 +40,8 @@ pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, 
     }
 
     let mut ws = domain.elements();
-    let mut c: Vec<F> = ws.by_ref()
+    let mut c: Vec<F> = ws
+        .by_ref()
         .take(n)
         .enumerate()
         .filter_map(|(i, wi)| f_on_d[i].is_none().then_some(wi))
@@ -63,15 +63,15 @@ pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, 
     end_timer!(_t_zc_on_d);
 
     // 3. Compute `f * z_c` in evaluation form.
-    let f_zc_on_d: Vec<F> = f_on_d.iter()
+    let f_zc_on_d: Vec<F> = f_on_d
+        .iter()
         .cloned()
         .zip(zc_on_d)
-        .map(|(vi, zi)| {
-            match vi {
-                Some(vi) => vi * zi,
-                None => F::zero()
-            }
-        }).collect();
+        .map(|(vi, zi)| match vi {
+            Some(vi) => vi * zi,
+            None => F::zero(),
+        })
+        .collect();
     let f_zc_on_d = Evaluations::from_vec_and_domain(f_zc_on_d, domain);
     // 4. Interpolate `f * z_c`.
     let _t_f_zc = start_timer!(|| format!("Interpolate f.z_C, {d}-iFFT"));
@@ -141,9 +141,7 @@ mod tests {
         let domain = Radix2EvaluationDomain::<F>::new(n).unwrap();
         let ws: Vec<F> = domain.elements().collect();
 
-        let f_on_S: Vec<(usize, F)> = S.iter()
-            .map(|&i| (i, f.evaluate(&ws[i])))
-            .collect();
+        let f_on_S: Vec<(usize, F)> = S.iter().map(|&i| (i, f.evaluate(&ws[i]))).collect();
 
         let _t = start_timer!(|| format!("Interpolation, (n, t) = ({n},{t})"));
         let f_ = interpolation_a_la_al(n, t, &f_on_S);
