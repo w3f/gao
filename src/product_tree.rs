@@ -176,6 +176,6 @@ mod tests {
     #[ignore]
     fn bench_product_tree() {
         let log_n = 10;
-        _bench_product_tree::<Fr>(log_n); // 8.546ms // 3.360ms
+        _bench_product_tree::<Fr>(log_n); // 8.546ms // 3.360ms // 2.690ms
     }
 }

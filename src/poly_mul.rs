@@ -1,6 +1,6 @@
 use crate::P;
 use ark_ff::{FftField, Field};
-use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
 use ark_std::{end_timer, start_timer};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -84,32 +84,59 @@ pub fn interleave<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
 
 /// Returns the unique monic polynomial of degree `n`, given its evaluations at `n` points.
 pub fn monic_interpolation<F: FftField>(p_evals: &Evaluations<F>) -> P<F> {
-    // Let `p` be a degree `n` monic polynomial.
-    // Then `p(X) = X^n + f(X)`, where `deg(f) < n`.
-    // Then `f` can be interpolated using `n` evaluations `(xi, vi)`.
-    // `f(X) = p(X) - X^n`
-    // `f(xi) = vi - xi^n, i = 1,...,n`
-    let n = p_evals.evals.len();
-    let domain = p_evals.domain();
-    let f_evals = p_evals.evals.iter()
-        .zip(domain.elements())
-        .map(|(vi, xi)| *vi - xi.pow([n as u64]))
-        .collect::<Vec<_>>();
-    let f_evals = Evaluations::from_vec_and_domain(f_evals, domain);
-    let mut f = f_evals.interpolate();
-    // p(X) = f(X) + X^n
-    f.coeffs.resize(n + 1, F::zero());
-    f.coeffs[n] = F::one();
-    f
+    let n = p_evals.domain().size();
+    let mut r = p_evals.interpolate_by_ref();
+    debug_assert!(r.degree() < n);
+    // `p = r + (X^n - 1)`, see `test_mul_mod_z()`
+    r.coeffs.resize(n + 1, F::zero());
+    r.coeffs[0] -= F::one();
+    r.coeffs[n] = F::one();
+    r
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ark_bls12_381::Fr;
-    use ark_ff::{One, Zero};
+    use ark_ff::One;
     use ark_poly::{DenseUVPolynomial, Polynomial};
     use ark_std::test_rng;
+
+    #[test]
+    fn test_mul_mod_z() {
+        let rng = &mut test_rng();
+
+        let log_d = 2;
+        let d = 2usize.pow(log_d);
+        let p = P::<Fr>::rand(d, rng);
+        let q = P::<Fr>::rand(d, rng);
+        let pq = &p * &q;
+
+        let domain_2d = GeneralEvaluationDomain::<Fr>::new(2 * d).unwrap();
+        let z_2d: P<Fr> = domain_2d.vanishing_polynomial().into(); // X^{2d} - 1
+        let p_evals = p.evaluate_over_domain_by_ref(domain_2d);
+        let q_evals = q.evaluate_over_domain_by_ref(domain_2d);
+        let pq_evals = &p_evals * &q_evals;
+        let r = pq_evals.interpolate_by_ref();
+        // `r(X) = p(X).q(X) mod (X^{2d} - 1), deg(r) < 2d`
+        assert_eq!(r, pq.divide_by_vanishing_poly(domain_2d).1);
+        // `p(X).q(X) = k(X).(X^{2d} - 1) + r(X)`
+        // `k(X).(X^{2d} - 1) = p(X).q(X) - r(X) | deg(.)`
+        // `deg(k) + 2d <= deg(pq) = 2d`, so `deg(k) = 0`
+
+        // Taking `X := 0`, `k = r(0) - p(0).q(0)`
+        let p_ct = p[0];
+        let q_ct = q[0];
+        let r_ct = r[0];
+        let k = r_ct - p_ct * q_ct;
+        assert_eq!(&r + &(&z_2d * k), pq);
+
+        // Alternatively, as `der(r) < 2d`, `k = lc(pq)`
+        let p_lc = p.coeffs[d];
+        let q_lc = q.coeffs[d];
+        let k = p_lc * q_lc;
+        assert_eq!(&r + &(&z_2d * k), pq);
+    }
 
     #[test]
     fn test_monic_interpolation() {
@@ -117,14 +144,6 @@ mod tests {
 
         let n = 4;
         let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
-
-        let p: P<Fr> = domain.vanishing_polynomial().into();
-        assert_eq!(p.degree(), n);
-        assert!(p.coeffs[n].is_one()); // `p` is monic
-        let p_evals = p.evaluate_over_domain_by_ref(domain);
-        assert_eq!(p_evals.evals, vec![Fr::zero(); n]);
-        let p_ = monic_interpolation(&p_evals);
-        assert_eq!(p_, p);
 
         let mut p = P::<Fr>::rand(n, rng);
         p.coeffs[n] = Fr::one();
