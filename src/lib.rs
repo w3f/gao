@@ -23,6 +23,10 @@ fn div<F: FftField>(p: &P<F>, q: &P<F>) -> (P<F>, P<F>) {
     p.divide_with_q_and_r(&q).unwrap()
 }
 
+// TODO: 1. move out
+// TODO: 2. precomputations for D\(C+S), move to the beginning of the domain?
+// TODO: 3. multipoint_evaluation for Al's optimization
+
 // We want to interpolate a degree `t-1` polynomial `f`
 // using evaluations of `f` at not more than 'n >= t' predefined points.
 
@@ -94,7 +98,7 @@ pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, 
     let f_zc = f_zc_on_d.interpolate();
     end_timer!(_t_f_zc);
 
-    let t_option_1 = start_timer!(|| "Option №1");
+    let _t_option_1 = start_timer!(|| "Option №1");
     // 5. Evaluate `f * z_c` and `z_c` over a coset of the domain.
     let coset = domain.get_coset(F::GENERATOR).unwrap();
     let f_zc_on_coset = f_zc.evaluate_over_domain_by_ref(coset);
@@ -102,11 +106,17 @@ pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, 
     // 6. Compute `f = (f * z_c) / z_c` over the coset in the evaluation form and interpolate it.
     let f_on_coset = &f_zc_on_coset / &zc_on_coset;
     let f1 = f_on_coset.interpolate();
-    end_timer!(t_option_1);
+    end_timer!(_t_option_1);
 
-    let t_option_2 = start_timer!(|| "Option №2");
+    let _t_option_2 = start_timer!(|| "Option №2");
     let d_zc = lagrange::d(&zc);
+    let _t_tree = start_timer!(|| format!("Tree of size = {d} - {s}, deg(z') = {}", d_zc.degree()));
+    let d_zc_on_d_ = tree_on_c.evaluate(&d_zc);
+    end_timer!(_t_tree);
+    let _t_fft = start_timer!(|| format!("iFFT, size = {d}"));
     let d_zc_on_d = d_zc.evaluate_over_domain_by_ref(domain);
+    // assert_eq!(d_zc_on_d_.unwrap().len(), d_zc_on_d.evals.len()); // TODO
+    end_timer!(_t_fft);
     let d_f_zc = lagrange::d(&f_zc);
     let d_f_zc_on_d = d_f_zc.evaluate_over_domain_by_ref(domain);
     let f_on_c = &d_f_zc_on_d / &d_zc_on_d;
@@ -122,7 +132,7 @@ pub fn interpolation_a_la_al<F: FftField>(n: usize, t: usize, f_on_s: &[(usize, 
     let f_on_d = Evaluations::from_vec_and_domain(f_on_d, domain);
     let f2 = f_on_d.interpolate();
     debug_assert_eq!(f1, f2);
-    end_timer!(t_option_2);
+    end_timer!(_t_option_2);
     f2
 }
 
