@@ -75,7 +75,7 @@ pub fn mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> (Monic<F>, Monic<F>) 
 pub struct Domain<F: FftField> {
     t: usize,
     n: usize,
-    fft_domain: Radix2EvaluationDomain<F>,
+    pub fft_domain: Radix2EvaluationDomain<F>,
     z_c2: Monic<F>,
 }
 
@@ -237,9 +237,8 @@ mod tests {
         let c: Vec<F> = is_in_c.iter().map(|&i| ws[i]).collect();
         let zc = z_xs(&c).poly;
 
-        let interpolation = Domain::new(t, n);
         let _t = start_timer!(|| format!("Interpolation, (t, s, n) = ({t},{s},{n})"));
-        let (f_, zc_) = interpolation.interpolate(&f_on_s);
+        let (f_, zc_) = domain.interpolate(&f_on_s);
         assert_eq!(f_, f);
         assert_eq!(zc_, zc);
         end_timer!(_t);
