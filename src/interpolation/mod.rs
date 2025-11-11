@@ -38,10 +38,7 @@ pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
     }
 }
 
-/// Computes the vanishing polynomial of a set `xs`,
-/// and multiplies it by a monic polynomial `p`.
-///
-pub fn mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> Monic<F> {
+pub fn _mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> Monic<F> {
     let m = xs.len();
     let k = p.poly.degree();
     let n = m + k;
@@ -49,9 +46,30 @@ pub fn mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> Monic<F> {
     let (left, right) = if h >= m {
         (z_xs(xs), p)
     } else {
-        (z_xs(&xs[0..h]), &mul_by_z_xs(&xs[h..m], p))
+        (z_xs(&xs[0..h]), &_mul_by_z_xs(&xs[h..m], p))
     };
     Monic::mul(&left, right)
+}
+
+/// Computes the vanishing polynomial of a set `xs`,
+/// and multiplies it by a monic polynomial `p`.
+/// TODO: now that doesn't make any sense
+pub fn mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> (Monic<F>, Monic<F>) {
+    let m = xs.len();
+    let k = p.poly.degree();
+    let n = m + k;
+    let h = n / 2;
+    if h >= m {
+        let z = z_xs(xs);
+        let zp = Monic::mul(&z, p);
+        (zp, z)
+    } else {
+        let l = z_xs(&xs[0..h]);
+        let (zp, z) = mul_by_z_xs(&xs[h..m], p);
+        let zp = Monic::mul(&l, &zp);
+        let z = Monic::mul(&l, &z);
+        (zp, z)
+    }
 }
 
 pub struct Domain<F: FftField> {
@@ -92,7 +110,9 @@ impl<F: FftField> Domain<F> {
     // 4. Interpolate `f * z_c`. // `d-FFT`
     // 5. Evaluate `f * z_c` and `z_c` over a coset of the domain. // `2 x d-FFT`
     // 6. Compute `f = (f * z_c) / z_c` over the coset in the evaluation form and interpolate it. // `d-FFT`
-    pub fn interpolate(&self, f_on_s: &[(usize, F)]) -> P<F> {
+
+    /// Returns the interpolating polynomial, and the erasure polynomial `z_c1(X) = (X - w_j_1)...(X - w_j_{n-s})`
+    pub fn interpolate(&self, f_on_s: &[(usize, F)]) -> (P<F>, P<F>) {
         let s = f_on_s.len();
         debug_assert!(self.t <= s);
         debug_assert!(s <= self.n);
@@ -115,7 +135,9 @@ impl<F: FftField> Domain<F> {
         // 1. Compute `z_C` - the vanishing polynomial of `{w_i | i in C}`.
         let _t_zc = start_timer!(|| format!("Compute z_C, deg(z_C) = {}", d - s));
         // `C = {w_i | i in [0,...,d-1]\S} = C1 + C2`, where C2 = {w_i | n <= i < d}`
-        let zc = mul_by_z_xs(&c1, &self.z_c2).poly;
+        let (zc, z_c1) = mul_by_z_xs(&c1, &self.z_c2);
+        let zc = zc.poly;
+        let z_c1 = z_c1.poly;
         debug_assert_eq!(zc.degree(), d - s);
         end_timer!(_t_zc);
 
@@ -156,7 +178,7 @@ impl<F: FftField> Domain<F> {
         let f_on_coset = &f_zc_on_coset / &zc_on_coset;
         let f = f_on_coset.interpolate();
         end_timer!(_t_option_1);
-        f
+        (f, z_c1)
         // let _t_option_2 = start_timer!(|| "Option №2");
         // let d_zc = lagrange::d(&zc);
         // let _t_tree = start_timer!(|| format!("Tree of size = {d} - {s}, deg(z') = {}", d_zc.degree()));
@@ -202,23 +224,24 @@ mod tests {
         debug_assert!(t <= s);
         debug_assert!(s <= n);
         let f = P::<F>::rand(t - 1, rng);
-        let is = {
-            let mut legit_is: Vec<usize> = (0..n).collect();
-            legit_is.shuffle(rng);
-            legit_is.truncate(s);
-            legit_is
-        };
-        debug_assert_eq!(is.len(), s);
-
+        let mut is: Vec<usize> = (0..n).collect();
+        is.shuffle(rng);
+        let (is_in_s, is_in_c) = is.split_at(s);
+        debug_assert_eq!(is_in_s.len(), s);
+        debug_assert_eq!(is_in_c.len(), n - s);
         let domain = Domain::new(t, n);
         let ws: Vec<F> = domain.fft_domain.elements().collect();
-
-        let f_on_s: Vec<(usize, F)> = is.iter().map(|&i| (i, f.evaluate(&ws[i]))).collect();
+        let f_on_s: Vec<(usize, F)> = is_in_s.iter()
+            .map(|&i| (i, f.evaluate(&ws[i])))
+            .collect();
+        let c: Vec<F> = is_in_c.iter().map(|&i| ws[i]).collect();
+        let zc = z_xs(&c).poly;
 
         let interpolation = Domain::new(t, n);
         let _t = start_timer!(|| format!("Interpolation, (t, s, n) = ({t},{s},{n})"));
-        let f_ = interpolation.interpolate(&f_on_s);
+        let (f_, zc_) = interpolation.interpolate(&f_on_s);
         assert_eq!(f_, f);
+        assert_eq!(zc_, zc);
         end_timer!(_t);
         println!("\n");
     }
@@ -244,10 +267,12 @@ mod tests {
         let xs: Vec<Fr> = (0..n).map(|_| Fr::rand(rng)).collect();
 
         let z = z_xs(&xs);
+        let z_l = z_xs(&xs[0..m]);
         let z_r = z_xs(&xs[m..n]);
-        let z_ = mul_by_z_xs(&xs[0..m], &z_r);
-        assert_eq!(z, z_);
+        let (z_, z_l_) = mul_by_z_xs(&xs[0..m], &z_r);
+        assert_eq!(z_, z);
+        assert_eq!(z_l_, z_l);
 
-        assert_eq!(mul_by_z_xs(&[], &one::<Fr>()), one());
+        assert_eq!(mul_by_z_xs(&[], &one::<Fr>()).0, one());
     }
 }
