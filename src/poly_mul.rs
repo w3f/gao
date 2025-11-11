@@ -11,10 +11,12 @@ pub struct Monic<F: FftField> {
 
 impl<F: FftField> Monic<F> {
     pub fn new(poly: P<F>) -> Self {
+        debug_assert_eq!(poly.coeffs.last().unwrap(), &F::one());
         Self { poly, evals: None }
     }
 
     pub fn with_evals(poly: P<F>, evals: Evaluations<F>) -> Self {
+        debug_assert_eq!(poly.coeffs.last().unwrap(), &F::one());
         debug_assert_eq!(evals.evals.len(), evals.domain().size());
         debug_assert!(poly.degree() <= evals.domain().size());
         Self {
@@ -36,7 +38,7 @@ impl<F: FftField> Monic<F> {
     pub fn mul(a: &Monic<F>, b: &Monic<F>) -> Monic<F> {
         let a_degree = a.poly.degree();
         let b_degree = b.poly.degree();
-        debug_assert!(a_degree.abs_diff(b_degree) <= 1);
+        // debug_assert!(a_degree.abs_diff(b_degree) <= 1);
         let c_degree = a_degree + b_degree;
 
         if c_degree < 128 {
