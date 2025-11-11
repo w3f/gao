@@ -231,9 +231,7 @@ mod tests {
         debug_assert_eq!(is_in_c.len(), n - s);
         let domain = Domain::new(t, n);
         let ws: Vec<F> = domain.fft_domain.elements().collect();
-        let f_on_s: Vec<(usize, F)> = is_in_s.iter()
-            .map(|&i| (i, f.evaluate(&ws[i])))
-            .collect();
+        let f_on_s: Vec<(usize, F)> = is_in_s.iter().map(|&i| (i, f.evaluate(&ws[i]))).collect();
         let c: Vec<F> = is_in_c.iter().map(|&i| ws[i]).collect();
         let zc = z_xs(&c).poly;
 
