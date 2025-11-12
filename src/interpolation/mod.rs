@@ -24,6 +24,29 @@ pub fn z_x<F: FftField>(x: F) -> Monic<F> {
 
 /// Vanishing polynomial of a set `xs`.
 /// `z(X) = (X - x1)...(X - xn)`
+#[cfg(feature = "parallel")]
+pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
+    let n = xs.len();
+    match n {
+        0 => one(),
+        1 => z_x(xs[0]),
+        _ => {
+            let h = n / 2;
+            let (mut l, mut r) = if n < 256 {
+                (z_xs(&xs[0..h]), z_xs(&xs[h..n]))
+            } else {
+                rayon::join(
+                    || z_xs(&xs[0..h]),
+                    || z_xs(&xs[h..n]))
+            };
+            Monic::mul(&mut l, &mut r)
+        }
+    }
+}
+
+/// Vanishing polynomial of a set `xs`.
+/// `z(X) = (X - x1)...(X - xn)`
+#[cfg(not(feature = "parallel"))]
 pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
     let n = xs.len();
     match n {

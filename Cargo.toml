@@ -19,6 +19,7 @@ harness = false
 
 [features]
 std = ["ark-std/std", "ark-ff/std", "ark-poly/std"]
-parallel = ["std", "ark-std/parallel", "ark-ff/parallel", "ark-poly/parallel", "rayon"]
+#parallel = ["std", "ark-std/parallel", "ark-ff/parallel", "ark-poly/parallel", "rayon"]
+parallel = ["rayon"]
 asm = ["ark-ff/asm", "ark-bls12-381/asm"]
 print-trace = ["ark-std/print-trace"]

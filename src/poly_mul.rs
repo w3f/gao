@@ -35,6 +35,18 @@ impl<F: FftField> Monic<F> {
         }
     }
 
+    #[cfg(feature = "parallel")]
+    fn get_evals(a: &Monic<F>, b: &Monic<F>, ab_degree: usize) -> (Evaluations<F>, Evaluations<F>) {
+        rayon::join(
+            || a.evals_for(ab_degree),
+            || b.evals_for(ab_degree))
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    fn get_evals(a: &Monic<F>, b: &Monic<F>, ab_degree: usize) -> (Evaluations<F>, Evaluations<F>) {
+        (a.evals_for(ab_degree), a.evals_for(ab_degree))
+    }
+
     pub fn mul(a: &Monic<F>, b: &Monic<F>) -> Monic<F> {
         let a_degree = a.poly.degree();
         let b_degree = b.poly.degree();
@@ -47,8 +59,8 @@ impl<F: FftField> Monic<F> {
             return Self::new(c);
         }
 
-        let mut c_evals = a.evals_for(c_degree);
-        c_evals *= &b.evals_for(c_degree);
+        let (mut c_evals, b_evals) = Self::get_evals(a, b, c_degree);
+        c_evals *= &b_evals;
         let c_evals_len = c_evals.evals.len();
         debug_assert_eq!(c_evals_len, c_evals.domain().size());
         let c = if c_evals_len > c_degree {

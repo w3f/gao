@@ -150,7 +150,8 @@ mod tests {
         assert_eq!(f1, f);
     }
 
-    // cargo test bench_z_s --release --features="print-trace" -- --show-output
+    // RAYON_NUM_THREADS=2 cargo test bench_z_s --release --features="parallel print-trace" -- --show-output // 1.262ms
+    // RAYON_NUM_THREADS=4 cargo test bench_z_s --release --features="parallel print-trace" -- --show-output // 1.131ms // 978.875µs
     #[test]
     fn bench_z_s() {
         let rng = &mut test_rng();
