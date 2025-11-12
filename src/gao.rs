@@ -118,7 +118,8 @@ mod tests {
     use super::*;
 
     use ark_bls12_381::Fr;
-    use ark_poly::univariate::DensePolynomial;
+    use ark_ff::Zero;
+    use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
     use ark_poly::DenseUVPolynomial;
     use ark_std::rand::prelude::SliceRandom;
     use ark_std::{test_rng, UniformRand};
@@ -147,5 +148,39 @@ mod tests {
         let f1 = decode(&b, k, n).unwrap();
         end_timer!(_t_decode);
         assert_eq!(f1, f);
+    }
+
+    // cargo test bench_z_s --release --features="print-trace" -- --show-output
+    #[test]
+    fn bench_z_s() {
+        let rng = &mut test_rng();
+        let n = 1000;
+        let k = 668;
+        let s = 100; // erasures
+        let domain = Domain::new(k, n);
+
+        let zd: DenseOrSparsePolynomial<Fr> = domain.fft_domain.vanishing_polynomial().into();
+        let mut ws = domain.fft_domain.elements();
+        let mut xs: Vec<_> = ws.by_ref().take(n).collect();
+        let c2s: Vec<_> = ws.collect();
+        let zc2 = z_xs(&c2s).poly;
+        let (zn, _r) = zd.divide_with_q_and_r(&zc2.into()).unwrap();
+        assert!(_r.is_zero());
+        assert_eq!(zn.degree(), n);
+        // erasures
+        xs.shuffle(rng);
+        let (ss, c1s) = xs.split_at(n - s);
+        let zc1 = z_xs(c1s).poly;
+
+        let _t_zs_mul = start_timer!(|| format!("z_S by mul, deg(z_S) = {}", n - s));
+        let zs = z_xs(ss).poly;
+        end_timer!(_t_zs_mul);
+        println!();
+        assert_eq!(zs.degree(), n - s);
+
+        let _t_zs_div = start_timer!(|| format!("z_S by div, deg(z_S) = {n} - {s}"));
+        let zs_ = &zn / &zc1;
+        end_timer!(_t_zs_div);
+        assert_eq!(zs_, zs);
     }
 }
