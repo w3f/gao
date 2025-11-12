@@ -453,6 +453,7 @@ dependencies = [
  "ark-poly",
  "ark-std",
  "criterion",
+ "rayon",
 ]
 
 [[package]]

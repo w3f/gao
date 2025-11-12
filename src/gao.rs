@@ -124,6 +124,7 @@ mod tests {
     use ark_std::{test_rng, UniformRand};
 
     // RUST_BACKTRACE=1 cargo test gaos_decoder --release --features="print-trace" -- --show-output
+    // RAYON_NUM_THREADS=4 cargo test gaos_decoder --release --features="parallel print-trace" -- --show-output
     #[test]
     fn gaos_decoder() {
         let rng = &mut test_rng();
