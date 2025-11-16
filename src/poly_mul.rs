@@ -44,7 +44,7 @@ impl<F: FftField> Monic<F> {
 
     #[cfg(not(feature = "parallel"))]
     fn get_evals(a: &Monic<F>, b: &Monic<F>, ab_degree: usize) -> (Evaluations<F>, Evaluations<F>) {
-        (a.evals_for(ab_degree), a.evals_for(ab_degree))
+        (a.evals_for(ab_degree), b.evals_for(ab_degree))
     }
 
     pub fn mul(a: &Monic<F>, b: &Monic<F>) -> Monic<F> {

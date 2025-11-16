@@ -10,9 +10,12 @@ pub mod poly_mul;
 pub mod product_tree;
 
 use ark_ff::FftField;
+use ark_poly::{Evaluations, Radix2EvaluationDomain};
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
 pub type P<F> = DensePolynomial<F>;
+pub type PE<F> = Evaluations<F, Radix2EvaluationDomain<F>>;
 pub type M<F> = [P<F>; 4];
+pub type ME<F> = [PE<F>; 4];
 
 fn div<F: FftField>(p: &P<F>, q: &P<F>) -> (P<F>, P<F>) {
     let p = DenseOrSparsePolynomial::from(p);
