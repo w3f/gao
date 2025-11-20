@@ -1,8 +1,7 @@
 use crate::Poly;
 use crate::P;
 use ark_ff::FftField;
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, Polynomial};
-use ark_std::iterable::Iterable;
+use ark_poly::{DenseUVPolynomial, Polynomial};
 use std::iter;
 
 /// `X^k.a(1/X)`
@@ -43,9 +42,8 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
 /// `g` such that `fg = 1 mod X^l`
 // uses quadratic multiplication
 fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
-    assert_eq!(f.coeffs[0], F::one());
-    let l = 2usize.pow(log_l as u32);
-    let mut gi = P::one();
+let l = 2usize.pow(log_l as u32);
+    let mut gi = P::c(f.coeffs[0].inverse().unwrap());
     let mut li = 1;
     let mut g_coeffs = Vec::with_capacity(l); // `g_coeffs = gi.coeffs`
     g_coeffs.push(gi.coeffs[0]); // `= P::one()`
@@ -118,60 +116,11 @@ pub fn half_mul_mod<F: FftField>(a: &P<F>, b: &P<F>, l2: usize) -> P<F> {
     P::from_coefficients_vec(res)
 }
 
-// pub fn div_fft<F: FftField>(a: &P<F>, b: &P<F>) -> (P<F>, P<F>) {
-//     debug_assert!(a.degree() > b.degree());
-//     let m = a.degree() - b.degree();
-//     let rev_a = rev(a.degree(), &a);
-//     let rev_b = rev(b.degree(), &b);
-//     let rev_b_inv = inv_mod_fft(&rev_b, 3);
-//     let rev_q = rem(&(rev_a * rev_b_inv), m + 1);
-//     let q = rev(m, &rev_q);
-//     let r = a - b * &q;
-//     (q, r)
-// }
-
-// fn inv_mod_fft<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
-//     assert_eq!(f.coeffs[0], F::one());
-//     let mut g = Monic::with_evals(P::one(), Evaluations::from_vec_and_domain(vec![F::one(), F::one()], GeneralEvaluationDomain::<F>::new(2).unwrap()));
-//     let mut n = 1;
-//     for _ in 0..log_l {
-//         n = n << 1;
-//         g = fft_step(&rem(&f, n), g);
-//         assert_eq!(g.poly.degree(), n - 1);
-//     }
-//     g.poly
-// }
-
-// fn fft_step<F: FftField>(f: &P<F>, g0: Monic<F>) -> Monic<F> {
-//     let n = g0.poly.degree() + 1;
-//     assert_eq!(f.degree(), 2 * n - 1);
-//
-//     let g_evals = double_evals(&g0.poly, g0.evals.as_ref().unwrap());
-//     assert_eq!(g_evals.domain().size(), 4 * n);
-//     let g2_evals = &g_evals * &g_evals; // 2n
-//     // let fg2 = mul_mod(f, &g2, 2 * n);
-//     // let fg2 = mul2(f, &g2, n, 2 * n);
-//     let f_evals = f.evaluate_over_domain_by_ref(g2_evals.domain());
-//     // let s = f_evals.domain().size() / g2_evals.domain().size();
-//     // let f_evals: Vec<F> = f_evals.evals.iter().step_by(s).collect();
-//     // assert_eq!(f_evals.len(), g_evals.domain().size());
-//     // let f_evals = Evaluations::from_vec_and_domain(f_evals, g2_evals.domain());
-//     let fg2_evals = &f_evals * &g2_evals;
-//     let g_evals = &(&g_evals * F::from(2)) - &fg2_evals;
-//     let g = g_evals.interpolate_by_ref();
-//     assert_eq!(g.degree(), 4 * n - 3);
-//     assert_eq!(g.slice(0, n - 1), g0.poly);
-//
-//     Monic::with_evals(g, g_evals)
-// }
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Poly;
     use ark_bls12_381::Fr;
-    use ark_ff::One;
     use ark_std::{end_timer, start_timer, test_rng};
 
 
@@ -208,8 +157,7 @@ mod tests {
         let rng = &mut test_rng();
         let log_l = 10;
         let l = 2usize.pow(log_l as u32);
-        let mut f = P::<Fr>::rand(l - 1, rng);
-        f.coeffs[0] = Fr::one();
+        let f = P::<Fr>::rand(l - 1, rng);
         let g = inv_mod(&f, log_l);
         let fg = &f * &g;
         assert_eq!(rem(&fg, l), P::one())
@@ -241,8 +189,7 @@ mod tests {
         let (m, n) = (2 * l - 1, l);
         assert_eq!(l, m - n + 1);
         let a = P::<Fr>::rand(m, rng);
-        let mut b = P::<Fr>::rand(n, rng);
-        b.coeffs[n] = Fr::one();
+        let b = P::<Fr>::rand(n, rng);
 
         let _t_ark_div = start_timer!(|| format!("Arkworks division, deg = {m} / {n}"));
         let res_ = crate::div(&a, &b);
