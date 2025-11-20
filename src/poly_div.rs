@@ -19,7 +19,7 @@ fn rev<F: FftField>(k: usize, a: &P<F>) -> P<F> {
 }
 
 /// `a(X) rem X^k`
-fn rem<F: FftField>(a: &P<F>, k: usize) -> P<F> {
+pub fn rem<F: FftField>(a: &P<F>, k: usize) -> P<F> {
     a.slice(0, k - 1)
 }
 
@@ -31,7 +31,6 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
     assert_eq!(2usize.pow(log_l as u32), l);
     let rev_a = rev(m, &a);
     let rev_b = rev(n, &b);
-    // let rev_b_inv = inv_mod_fft(&rev_b, log_l);
     let rev_b_inv = inv_mod(&rev_b, log_l);
     let rev_q = rem(&(rev_a * rev_b_inv), l);
     let q = rev(l - 1, &rev_q);
@@ -41,16 +40,20 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
 
 /// `g` such that `fg = 1 mod X^l`
 // uses quadratic multiplication
-fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
+pub fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
 let l = 2usize.pow(log_l as u32);
     let mut gi = P::c(f.coeffs[0].inverse().unwrap());
     let mut li = 1;
     let mut g_coeffs = Vec::with_capacity(l); // `g_coeffs = gi.coeffs`
     g_coeffs.push(gi.coeffs[0]); // `= P::one()`
-    for _ in 0..log_l {
+    for k in 0..log_l {
         li = li << 1;
-        // let g2_high = hensel_lift(&rem(&f, li), &gi);
-        let g2_high = hensel_lift_fft(&rem(&f, li), &gi);
+        let fi = rem(&f, li);
+        let g2_high = if k < 7 {
+            hensel_lift(&fi, &gi)
+        } else {
+            hensel_lift_fft(&fi, &gi)
+        };
         g_coeffs.extend(g2_high.coeffs); // `g2 = (g1.coeffs ||  g2_high.coeffs) = g1 + g2_high.X^i`
         gi = P::from_coefficients_slice(&g_coeffs);
     }
@@ -61,7 +64,7 @@ let l = 2usize.pow(log_l as u32);
 // `g2 = 2.g1 - f.g1^2 mod X^2n = g1(2 - f.g1) mod X^2n`
 // But `f.g1 = 1 mod X^n`, so `g2 = g1 mod X^n`
 // Thus `g2 = g2_low + g2_high.X^n`, where `g2_low = g1` and `g2_high = -(f.g1^2 / X^n)` `
-fn hensel_lift_fft<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
+pub fn hensel_lift_fft<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
     let n = g1.degree() + 1;
     let g1_sq = g1 * g1;
     let minus_g2 = f * &g1_sq;
@@ -75,7 +78,7 @@ fn hensel_lift_fft<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
 /// computes
 /// `g2` such that `f.g2 = 1 mod X^2l`.
 /// Returns the upper half of `g2`.
-fn hensel_lift<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
+pub fn hensel_lift<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
     let i = g1.degree() + 1; // mod X^{i-1}
     let i2 = 2 * i;
     assert_eq!(f.degree(), i2 - 1);
@@ -179,7 +182,8 @@ mod tests {
         assert_eq!(ab_high.coeffs, ab.coeffs[l..]);
     }
 
-    // cargo test test_div --release --features="print-trace" -- --show-output
+    //
+
     #[test]
     fn test_div() {
         let rng = &mut test_rng();
