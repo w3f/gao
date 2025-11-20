@@ -40,19 +40,6 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
     (q, r)
 }
 
-// uses whatever arkworks does for multiplying polynomials
-fn inv_mod_fft<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
-    assert_eq!(f.coeffs[0], F::one());
-    let mut g = P::one();
-    let mut d = 1;
-    for _ in 0..log_l {
-        d = d << 1;
-        g = &(&g * F::from(2)) - &(f * &(&g * &g));
-        g = rem(&g, d);
-    }
-    g
-}
-
 /// `g` such that `fg = 1 mod X^l`
 // uses quadratic multiplication
 fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
@@ -64,12 +51,24 @@ fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
     g_coeffs.push(gi.coeffs[0]); // `= P::one()`
     for _ in 0..log_l {
         li = li << 1;
-        let g2_high = hensel_lift(&rem(&f, li), &gi);
+        // let g2_high = hensel_lift(&rem(&f, li), &gi);
+        let g2_high = hensel_lift_fft(&rem(&f, li), &gi);
         g_coeffs.extend(g2_high.coeffs); // `g2 = (g1.coeffs ||  g2_high.coeffs) = g1 + g2_high.X^i`
         gi = P::from_coefficients_slice(&g_coeffs);
     }
     let g = P::from_coefficients_vec(g_coeffs);
     g
+}
+
+// `g2 = 2.g1 - f.g1^2 mod X^2n = g1(2 - f.g1) mod X^2n`
+// But `f.g1 = 1 mod X^n`, so `g2 = g1 mod X^n`
+// Thus `g2 = g2_low + g2_high.X^n`, where `g2_low = g1` and `g2_high = -(f.g1^2 / X^n)` `
+fn hensel_lift_fft<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
+    let n = g1.degree() + 1;
+    let g1_sq = g1 * g1;
+    let minus_g2 = f * &g1_sq;
+    let g2_high = -minus_g2.slice(n, 2 * n - 1);
+    g2_high
 }
 
 // See https://people.csail.mit.edu/madhu/ST12/scribe/lect06.pdf, section 2.1
@@ -165,8 +164,6 @@ pub fn half_mul_mod<F: FftField>(a: &P<F>, b: &P<F>, l2: usize) -> P<F> {
 //
 //     Monic::with_evals(g, g_evals)
 // }
-
-
 
 
 #[cfg(test)]
