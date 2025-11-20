@@ -24,7 +24,6 @@ trait Poly<F: Field> {
     fn one() -> Self;
     fn x() -> Self;
     fn slice(&self, from: usize, to: usize) -> Self;
-    fn slice2(&self, from: usize, to: usize) -> Self;
     fn lc(&self) -> F;
     fn ct(&self) -> F;
 }
@@ -48,15 +47,9 @@ impl<F: FftField> Poly<F> for P<F> {
         Self::xk(1)
     }
 
-    /// `f_k,...,f_l`
+    /// Returns a subarray of coefficients `f_k,...,f_l` as a degree `l - k` polynomial.
     fn slice(&self, from: usize, to: usize) -> Self {
         Self::from_coefficients_slice(&self.coeffs[from..to + 1])
-    }
-
-    fn slice2(&self, from: usize, to: usize) -> Self {
-        let mut coeffs = vec![F::zero(); to + 1];
-        coeffs[from..].copy_from_slice(&self.coeffs[from..to + 1]);
-        Self::from_coefficients_vec(coeffs)
     }
 
     /// The leading coefficient `f_n`.

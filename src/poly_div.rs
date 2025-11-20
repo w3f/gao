@@ -32,7 +32,7 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
     assert_eq!(2usize.pow(log_l as u32), l);
     let rev_a = rev(m, &a);
     let rev_b = rev(n, &b);
-    // let rev_b_inv = inv_mod_naive(&rev_b, log_l);
+    // let rev_b_inv = inv_mod_fft(&rev_b, log_l);
     let rev_b_inv = inv_mod(&rev_b, log_l);
     let rev_q = rem(&(rev_a * rev_b_inv), l);
     let q = rev(l - 1, &rev_q);
@@ -41,7 +41,7 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
 }
 
 // uses whatever arkworks does for multiplying polynomials
-fn inv_mod_naive<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
+fn inv_mod_fft<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
     assert_eq!(f.coeffs[0], F::one());
     let mut g = P::one();
     let mut d = 1;
@@ -85,14 +85,9 @@ fn hensel_lift<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
 
     let g1sq = g1 * g1;
     assert_eq!(g1sq.degree(), i2 - 2);
-    let f_g1sq = mul_mod(f, &g1sq, i2);
-    // let fg2 = mul2(f, &g2, i, i2);
-    assert_eq!(f_g1sq.degree(), i2 - 1);
-    let g2_high: Vec<F> = f_g1sq.coeffs.iter()
-        .skip(i) // TODO: redundant
-        .map(|&c| -c)
-        .take(i)
-        .collect();
+    let f_g1sq_high = half_mul_mod(f, &g1sq, i2);
+    assert_eq!(f_g1sq_high.degree(), i - 1);
+    let g2_high: Vec<F> = f_g1sq_high.coeffs.iter().map(|&c| -c).collect();
     let g2_high = P::from_coefficients_vec(g2_high);
     g2_high
 }
@@ -104,6 +99,21 @@ pub fn mul_mod<F: FftField>(a: &P<F>, b: &P<F>, l: usize) -> P<F> {
         for (j, bj) in b.coeffs.iter().take(l - i).enumerate() {
             assert!(i + j < l);
             res[i + j] += ai * bj;
+        }
+    }
+    P::from_coefficients_vec(res)
+}
+
+// High half of `a.b mod X^2l`
+pub fn half_mul_mod<F: FftField>(a: &P<F>, b: &P<F>, l2: usize) -> P<F> {
+    let l = l2 / 2;
+    let mut res = vec![F::zero(); l];
+    for (i, &ai) in a.coeffs.iter().enumerate().take(l2) {
+        let skip = l.saturating_sub(i); // j >= l - i
+        for (j, bj) in b.coeffs.iter().enumerate().skip(skip).take((l2 - skip) - i) {
+            assert!(i + j >= l);
+            assert!(i + j < l2);
+            res[i + j - l] += ai * bj;
         }
     }
     P::from_coefficients_vec(res)
@@ -157,18 +167,7 @@ pub fn mul_mod<F: FftField>(a: &P<F>, b: &P<F>, l: usize) -> P<F> {
 // }
 
 
-// pub fn mul2<F: FftField>(a: &P<F>, b: &P<F>, k: usize, l: usize) -> P<F> {
-//     let mut res = vec![F::zero(); l];
-//     for (i, &ai) in a.coeffs.iter().enumerate().take(l) {
-//         let skip = k.saturating_sub(i);
-//         for (j, bj) in b.coeffs.iter().enumerate().skip(skip).take(l - skip - i) {
-//             assert!(i + j >= k);
-//             assert!(i + j < l);
-//             res[i + j] += ai * bj;
-//         }
-//     }
-//     P::from_coefficients_vec(res)
-// }
+
 
 #[cfg(test)]
 mod tests {
@@ -219,6 +218,22 @@ mod tests {
         assert_eq!(rem(&fg, l), P::one())
     }
 
+    #[test]
+    fn test_mul_mod() {
+        let rng = &mut test_rng();
+
+        let log_l = 1;
+        let l = 2usize.pow(log_l as u32);
+        let l2 = 2 * l;
+        let a = P::<Fr>::rand(l2 - 1, rng);
+        let b = P::<Fr>::rand(l2 - 1, rng);
+
+        let ab = mul_mod(&a, &b, l2);
+        let ab_high = half_mul_mod(&a, &b, l2);
+
+        assert_eq!(ab_high.coeffs, ab.coeffs[l..]);
+    }
+
     // cargo test test_div --release --features="print-trace" -- --show-output
     #[test]
     fn test_div() {
@@ -260,6 +275,7 @@ mod tests {
     //
     //     let p1 = p.slice(2, 3);
     //     println!("p1 = {p1:?}");
+    //     let p_over_d1 = p1.evaluate_over_domain_by_ref(d1);
     //     let p_over_d1 = p1.evaluate_over_domain_by_ref(d1);
     //     let p2_over_d1 = &p_over_d1 * &p_over_d1;
     //     let p2 = p2_over_d1.interpolate_by_ref();
