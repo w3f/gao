@@ -1,4 +1,4 @@
-use crate::poly_mul::Monic;
+use crate::poly_mul::FftPoly;
 use crate::P;
 use ark_ff::{FftField, Field};
 use ark_poly::univariate::DenseOrSparsePolynomial;
@@ -30,7 +30,7 @@ fn z<F: Field>(x: F) -> P<F> {
 
 /// The code below assumes that `z_i = z(x_i) = X - x_i` is a monic linear polynomial for any `i`.
 
-pub struct ProductTree<F: FftField>(pub Vec<Monic<F>>);
+pub struct ProductTree<F: FftField>(pub Vec<FftPoly<F>>);
 
 impl<F: FftField> ProductTree<F> {
     // TODO: xs should be distinct
@@ -38,12 +38,12 @@ impl<F: FftField> ProductTree<F> {
         let n = xs.len();
         match n {
             0 => Err(()),
-            1 => Ok(Self(vec![Monic::new(z(xs[0]))])),
+            1 => Ok(Self(vec![FftPoly::new(z(xs[0]))])),
             _ => {
                 let h = n / 2;
                 let subtree_0 = Self::new(&xs[0..h])?;
                 let subtree_1 = Self::new(&xs[h..n])?;
-                let root = Monic::mul(subtree_0.root(), subtree_1.root());
+                let root = FftPoly::mul(subtree_0.root(), subtree_1.root());
                 Ok(Self([subtree_0.0, subtree_1.0, vec![root]].concat()))
             }
         }
@@ -69,7 +69,7 @@ impl<F: FftField> ProductTree<F> {
         (subtree_l, subtree_r, root)
     }
 
-    pub fn root(&self) -> &Monic<F> {
+    pub fn root(&self) -> &FftPoly<F> {
         self.0.split_last().unwrap().0
     }
 

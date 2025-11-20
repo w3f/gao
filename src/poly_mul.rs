@@ -1,22 +1,20 @@
-use crate::P;
+use crate::{Poly, P};
 use ark_ff::{FftField, Field};
 use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
 use ark_std::{end_timer, start_timer};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Monic<F: FftField> {
+pub struct FftPoly<F: FftField> {
     pub poly: P<F>,
     evals: Option<Evaluations<F>>,
 }
 
-impl<F: FftField> Monic<F> {
+impl<F: FftField> FftPoly<F> {
     pub fn new(poly: P<F>) -> Self {
-        debug_assert_eq!(poly.coeffs.last().unwrap(), &F::one());
         Self { poly, evals: None }
     }
 
     pub fn with_evals(poly: P<F>, evals: Evaluations<F>) -> Self {
-        debug_assert_eq!(poly.coeffs.last().unwrap(), &F::one());
         debug_assert_eq!(evals.evals.len(), evals.domain().size());
         debug_assert!(poly.degree() <= evals.domain().size());
         Self {
@@ -36,21 +34,20 @@ impl<F: FftField> Monic<F> {
     }
 
     #[cfg(feature = "parallel")]
-    fn get_evals(a: &Monic<F>, b: &Monic<F>, ab_degree: usize) -> (Evaluations<F>, Evaluations<F>) {
+    fn get_evals(a: &FftPoly<F>, b: &FftPoly<F>, ab_degree: usize) -> (Evaluations<F>, Evaluations<F>) {
         rayon::join(
             || a.evals_for(ab_degree),
             || b.evals_for(ab_degree))
     }
 
     #[cfg(not(feature = "parallel"))]
-    fn get_evals(a: &Monic<F>, b: &Monic<F>, ab_degree: usize) -> (Evaluations<F>, Evaluations<F>) {
+    fn get_evals(a: &FftPoly<F>, b: &FftPoly<F>, ab_degree: usize) -> (Evaluations<F>, Evaluations<F>) {
         (a.evals_for(ab_degree), b.evals_for(ab_degree))
     }
 
-    pub fn mul(a: &Monic<F>, b: &Monic<F>) -> Monic<F> {
+    pub fn mul(a: &FftPoly<F>, b: &FftPoly<F>) -> FftPoly<F> {
         let a_degree = a.poly.degree();
         let b_degree = b.poly.degree();
-        // debug_assert!(a_degree.abs_diff(b_degree) <= 1);
         let c_degree = a_degree + b_degree;
 
         if c_degree < 128 {
@@ -65,10 +62,13 @@ impl<F: FftField> Monic<F> {
         debug_assert_eq!(c_evals_len, c_evals.domain().size());
         let c = if c_evals_len > c_degree {
             c_evals.interpolate_by_ref()
+        } else if c_evals_len == c_degree {
+            let c_lc = a.poly.lc() * b.poly.lc();
+            ifft_mod_z(&c_evals, c_lc)
         } else {
-            monic_interpolation(&c_evals)
+            panic!();
         };
-        Monic::with_evals(c, c_evals)
+        FftPoly::with_evals(c, c_evals)
     }
 }
 
@@ -102,14 +102,14 @@ pub fn interleave<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
 }
 
 /// Returns the unique monic polynomial of degree `n`, given its evaluations at `n` points.
-pub fn monic_interpolation<F: FftField>(p_evals: &Evaluations<F>) -> P<F> {
+pub fn ifft_mod_z<F: FftField>(p_evals: &Evaluations<F>, p_lc: F) -> P<F> {
     let n = p_evals.domain().size();
     let mut r = p_evals.interpolate_by_ref();
     debug_assert!(r.degree() < n);
-    // `p = r + (X^n - 1)`, see `test_mul_mod_z()`
+    // `p = r + k.(X^n - 1)`, see `test_mul_mod_z()`
     r.coeffs.resize(n + 1, F::zero());
-    r.coeffs[0] -= F::one();
-    r.coeffs[n] = F::one();
+    r.coeffs[0] -= p_lc;
+    r.coeffs[n] = p_lc;
     r
 }
 
@@ -164,10 +164,9 @@ mod tests {
         let n = 4;
         let domain = GeneralEvaluationDomain::<Fr>::new(n).unwrap();
 
-        let mut p = P::<Fr>::rand(n, rng);
-        p.coeffs[n] = Fr::one();
+        let p = P::<Fr>::rand(n, rng);
         let p_evals = p.evaluate_over_domain_by_ref(domain);
-        let p_ = monic_interpolation(&p_evals);
+        let p_ = ifft_mod_z(&p_evals, p.lc());
         assert_eq!(p_, p);
     }
 
@@ -244,10 +243,10 @@ mod tests {
         let c_evals = c.evaluate_over_domain_by_ref(domain_2x);
 
         {
-            let a = Monic::new(a.clone());
-            let b = Monic::new(b.clone());
+            let a = FftPoly::new(a.clone());
+            let b = FftPoly::new(b.clone());
             let _t_monic_mul = start_timer!(|| format!("Monic mul, n = {n}"));
-            let ab = Monic::mul(&a, &b);
+            let ab = FftPoly::mul(&a, &b);
             end_timer!(_t_monic_mul); // 553.416µs
             println!();
             assert_eq!(ab.poly, c);
@@ -257,11 +256,11 @@ mod tests {
         {
             let a_evals = a.evaluate_over_domain_by_ref(domain);
             let b_evals = b.evaluate_over_domain_by_ref(domain);
-            let a = Monic::with_evals(a, a_evals);
-            let b = Monic::with_evals(b, b_evals);
+            let a = FftPoly::with_evals(a, a_evals);
+            let b = FftPoly::with_evals(b, b_evals);
             // Assumes that size `n` evaluations of the multiplicands are known.
             let _t_mul_with_evals = start_timer!(|| format!("Monic mul with evals, n = {n}"));
-            let ab = Monic::mul(&a, &b);
+            let ab = FftPoly::mul(&a, &b);
             end_timer!(_t_mul_with_evals); // 487.292µs
             println!();
             assert_eq!(ab.poly, c);

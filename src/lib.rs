@@ -10,7 +10,7 @@ pub mod poly_mul;
 pub mod product_tree;
 pub mod poly_div;
 
-use ark_ff::{FftField, Field, One};
+use ark_ff::{FftField, Field};
 use ark_poly::{DenseUVPolynomial, Evaluations, Radix2EvaluationDomain};
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
 pub type P<F> = DensePolynomial<F>;

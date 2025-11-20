@@ -1,4 +1,4 @@
-use crate::poly_mul::Monic;
+use crate::poly_mul::FftPoly;
 use crate::P;
 use ark_ff::FftField;
 use ark_poly::{
@@ -10,22 +10,22 @@ use ark_std::{end_timer, start_timer};
 
 /// Constant polynomial
 /// `one(X) = 1`.
-fn one<F: FftField>() -> Monic<F> {
+fn one<F: FftField>() -> FftPoly<F> {
     let z_0 = P::from_coefficients_vec(vec![F::one()]);
-    Monic::new(z_0)
+    FftPoly::new(z_0)
 }
 
 /// Vanishing polynomial of a point `x`.
 /// `z(X) = X - x`
-pub fn z_x<F: FftField>(x: F) -> Monic<F> {
+pub fn z_x<F: FftField>(x: F) -> FftPoly<F> {
     let z_1 = P::from_coefficients_slice(&[-x, F::one()]); // `= -x.0 + 1.X = X - x`
-    Monic::new(z_1)
+    FftPoly::new(z_1)
 }
 
 /// Vanishing polynomial of a set `xs`.
 /// `z(X) = (X - x1)...(X - xn)`
 #[cfg(feature = "parallel")]
-pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
+pub fn z_xs<F: FftField>(xs: &[F]) -> FftPoly<F> {
     let n = xs.len();
     match n {
         0 => one(),
@@ -39,7 +39,7 @@ pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
                     || z_xs(&xs[0..h]),
                     || z_xs(&xs[h..n]))
             };
-            Monic::mul(&mut l, &mut r)
+            FftPoly::mul(&mut l, &mut r)
         }
     }
 }
@@ -47,7 +47,7 @@ pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
 /// Vanishing polynomial of a set `xs`.
 /// `z(X) = (X - x1)...(X - xn)`
 #[cfg(not(feature = "parallel"))]
-pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
+pub fn z_xs<F: FftField>(xs: &[F]) -> FftPoly<F> {
     let n = xs.len();
     match n {
         0 => one(),
@@ -56,12 +56,12 @@ pub fn z_xs<F: FftField>(xs: &[F]) -> Monic<F> {
             let h = n / 2;
             let left = z_xs(&xs[0..h]);
             let right = z_xs(&xs[h..n]);
-            Monic::mul(&left, &right)
+            FftPoly::mul(&left, &right)
         }
     }
 }
 
-pub fn _mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> Monic<F> {
+pub fn _mul_by_z_xs<F: FftField>(xs: &[F], p: &FftPoly<F>) -> FftPoly<F> {
     let m = xs.len();
     let k = p.poly.degree();
     let n = m + k;
@@ -71,26 +71,26 @@ pub fn _mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> Monic<F> {
     } else {
         (z_xs(&xs[0..h]), &_mul_by_z_xs(&xs[h..m], p))
     };
-    Monic::mul(&left, right)
+    FftPoly::mul(&left, right)
 }
 
 /// Computes the vanishing polynomial of a set `xs`,
 /// and multiplies it by a monic polynomial `p`.
 /// TODO: now that doesn't make any sense
-pub fn mul_by_z_xs<F: FftField>(xs: &[F], p: &Monic<F>) -> (Monic<F>, Monic<F>) {
+pub fn mul_by_z_xs<F: FftField>(xs: &[F], p: &FftPoly<F>) -> (FftPoly<F>, FftPoly<F>) {
     let m = xs.len();
     let k = p.poly.degree();
     let n = m + k;
     let h = n / 2;
     if h >= m {
         let z = z_xs(xs);
-        let zp = Monic::mul(&z, p);
+        let zp = FftPoly::mul(&z, p);
         (zp, z)
     } else {
         let l = z_xs(&xs[0..h]);
         let (zp, z) = mul_by_z_xs(&xs[h..m], p);
-        let zp = Monic::mul(&l, &zp);
-        let z = Monic::mul(&l, &z);
+        let zp = FftPoly::mul(&l, &zp);
+        let z = FftPoly::mul(&l, &z);
         (zp, z)
     }
 }
@@ -99,7 +99,7 @@ pub struct Domain<F: FftField> {
     t: usize,
     n: usize,
     pub fft_domain: Radix2EvaluationDomain<F>,
-    z_c2: Monic<F>,
+    z_c2: FftPoly<F>,
 }
 
 impl<F: FftField> Domain<F> {
