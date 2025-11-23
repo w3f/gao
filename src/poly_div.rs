@@ -1,7 +1,7 @@
 use crate::Poly;
 use crate::P;
 use ark_ff::FftField;
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain};
 use std::iter;
 
 /// `X^k.a(1/X)`
@@ -62,13 +62,25 @@ pub fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
 pub fn hensel_lift_fft<F: FftField>(f: &P<F>, g1: &P<F>, n: usize) -> P<F> {
     debug_assert!(g1.degree() < n);
     debug_assert!(f.degree() < 2 * n);
-    let fg_high = middle_prod(n, &g1, &f);
+    let d = GeneralEvaluationDomain::new(2 * n).unwrap();
+    let g1 = g1.evaluate_over_domain_by_ref(d);
+    let fg_high = middle_prod(&g1, &f);
     let fg = P::one() + fg_high.mul_xk(n); // f.g1 = 1 mod X^n
-    let fg2_high = middle_prod(n, &g1, &fg);
+    let fg2_high = middle_prod(&g1, &fg);
     -fg2_high
 }
 
-fn middle_prod<F: FftField>(n: usize, p1: &P<F>, p2: &P<F>) -> P<F> {
+fn middle_prod<F: FftField>(p1_over_d: &Evaluations<F>, p2: &P<F>) -> P<F> {
+    let d = p1_over_d.domain();
+    let n2 = d.size();
+    debug_assert!(p2.degree() < n2);
+    let p2_over_d = p2.evaluate_over_domain_by_ref(d);
+    let p_over_d = p1_over_d * &p2_over_d;
+    let p = p_over_d.interpolate();
+    p.div_xk(n2 / 2)
+}
+
+fn middle_prod2<F: FftField>(n: usize, p1: &P<F>, p2: &P<F>) -> P<F> {
     debug_assert!(p1.degree() < n);
     debug_assert!(p2.degree() < 2 * n);
     let d = Radix2EvaluationDomain::new(2 * n).unwrap();
@@ -176,7 +188,7 @@ mod tests {
     fn test_mul_mod() {
         let rng = &mut test_rng();
 
-        let log_l = 1;
+        let log_l = 9;
         let l = 2usize.pow(log_l as u32);
         let l2 = 2 * l;
         let a = P::<Fr>::rand(l2 - 1, rng);
@@ -188,13 +200,12 @@ mod tests {
         assert_eq!(ab_high.coeffs, ab.coeffs[l..]);
     }
 
-    //
-
+    // RUST_BACKTRACE=1 cargo test test_div --release --features="print-trace" -- --show-output
     #[test]
     fn test_div() {
         let rng = &mut test_rng();
 
-        let log_l = 2; // l = deg(a) - deg(b) + 1
+        let log_l = 16; // l = deg(a) - deg(b) + 1
         let l = 2usize.pow(log_l as u32);
         let (m, n) = (2 * l - 1, l);
         assert_eq!(l, m - n + 1);
