@@ -36,18 +36,18 @@ fn polynomial_mul<F: FftField>(c: &mut Criterion) {
 fn polynomial_div<F: FftField>(c: &mut Criterion) {
     let rng = &mut test_rng();
     let mut group = c.benchmark_group("polynomial-div");
-    let inputs = (2..11)
+    let inputs = (5..9)
         .map(|log_l| {
             let l = 2usize.pow(log_l as u32);
             let f = P::<F>::rand(l - 1, rng);
-            let g = inv_mod(&f.mod_xk(l / 2), log_l - 1);
+            let g = inv_mod(&f.mod_xk(l / 2), l / 2);
             (f, g, log_l)
         })
         .collect::<Vec<_>>();
 
     for (f, g, log_l) in inputs.iter() {
         group.bench_with_input(BenchmarkId::new("quadratic-lift", log_l), &(f, g), |b, (f, g)| {
-            b.iter(|| hensel_lift(&f, &g))
+            b.iter(|| hensel_lift(&f, &g,1 << log_l))
         });
 
         group.bench_with_input(BenchmarkId::new("fft-lift", log_l), &(f, g), |b, (f, g)| {

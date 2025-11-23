@@ -121,7 +121,6 @@ pub fn matrix_product_tree<F: FftField>(bs: &[M<F>]) -> M<F> {
 mod tests {
     use super::*;
 
-    use crate::div;
     use ark_bls12_381::Fr;
     use ark_std::{end_timer, start_timer, test_rng};
     use crate::gcd::euclid;
@@ -136,7 +135,7 @@ mod tests {
         let B1 = BezoutMatrix::new(&r0, &r1).unwrap();
         assert_eq!(B1.find_r1(&r0, &r1), r1);
         let r2 = B1.next_remainder(&r0, &r1);
-        assert_eq!(r2, div(&r0, &r1).1);
+        assert_eq!(r2, crate::poly_div::div(&r0, &r1).1);
 
         let B2 = BezoutMatrix::new(&r1, &r2).unwrap();
         let (r2_, r3) = B2.apply(&r1, &r2);

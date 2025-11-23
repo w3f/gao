@@ -12,7 +12,8 @@ pub mod poly_div;
 
 use ark_ff::{FftField, Field};
 use ark_poly::{DenseUVPolynomial, Evaluations, Polynomial, Radix2EvaluationDomain};
-use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial};
+use ark_poly::univariate::DensePolynomial;
+
 pub type P<F> = DensePolynomial<F>;
 pub type PE<F> = Evaluations<F, Radix2EvaluationDomain<F>>;
 pub type M<F> = [P<F>; 4];
@@ -65,7 +66,11 @@ impl<F: FftField> Poly<F> for P<F> {
     }
 
     fn mod_xk(&self, k: usize) -> Self {
-        self.slice(0, k)
+        if k > self.degree() {
+            self.clone()
+        } else {
+            self.slice(0, k)
+        }
     }
 
     fn mul_xk(&self, k: usize) -> Self {
@@ -87,11 +92,15 @@ impl<F: FftField> Poly<F> for P<F> {
     }
 }
 
-fn div<F: FftField>(p: &P<F>, q: &P<F>) -> (P<F>, P<F>) {
-    let p = DenseOrSparsePolynomial::from(p);
-    let q = DenseOrSparsePolynomial::from(q);
-    p.divide_with_q_and_r(&q).unwrap()
-}
-
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use ark_ff::FftField;
+    use ark_poly::univariate::DenseOrSparsePolynomial;
+    use crate::P;
+
+    pub fn ark_div<F: FftField>(p: &P<F>, q: &P<F>) -> (P<F>, P<F>) {
+        let p = DenseOrSparsePolynomial::from(p);
+        let q = DenseOrSparsePolynomial::from(q);
+        p.divide_with_q_and_r(&q).unwrap()
+    }
+}

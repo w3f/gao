@@ -1,6 +1,6 @@
 use crate::half_gcd::simple_half_gcd;
 use crate::interpolation::{z_xs, Domain};
-use crate::{div, P};
+use crate::P;
 use ark_ff::FftField;
 use ark_poly::Polynomial;
 use ark_poly::{DenseUVPolynomial, EvaluationDomain};
@@ -104,7 +104,7 @@ pub fn decode<F: FftField>(b: &[(usize, F)], k: usize, n: usize) -> Result<P<F>,
 
     let _t_div =
         start_timer!(|| format!("g0 / v, deg(g0) = {}, deg(v) = {}", g0.degree(), v.degree()));
-    let (h1, r) = div(&g0, v);
+    let (h1, r) = crate::poly_div::div(&g0, v);
     println!("{r:?}");
     // assert!(r.is_zero());
     end_timer!(_t_div);

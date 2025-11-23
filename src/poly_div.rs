@@ -18,15 +18,14 @@ fn rev<F: FftField>(k: usize, a: &P<F>) -> P<F> {
     a_rev
 }
 
-pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
+pub fn div<F: FftField>(a: &P<F>, b: &P<F>) -> (P<F>, P<F>) {
     let m = a.degree();
     let n = b.degree();
     debug_assert!(m > n);
     let l = m - n + 1;
-    assert_eq!(2usize.pow(log_l as u32), l);
     let rev_a = rev(m, &a);
     let rev_b = rev(n, &b);
-    let rev_b_inv = inv_mod(&rev_b, log_l);
+    let rev_b_inv = inv_mod(&rev_b, l);
     let rev_q = (rev_a * rev_b_inv).mod_xk(l);
     let q = rev(l - 1, &rev_q);
     let r = a - b * &q;
@@ -35,8 +34,8 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>, log_l: usize) -> (P<F>, P<F>) {
 
 /// `g` such that `fg = 1 mod X^l`
 // uses quadratic multiplication
-pub fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
-    let l = 2usize.pow(log_l as u32);
+pub fn inv_mod<F: FftField>(f: &P<F>, l: usize) -> P<F> {
+    let log_l = ark_std::log2(l);
     let mut gi = P::constant(f.ct().inverse().unwrap());
     let mut li = 1;
     let mut g_coeffs = Vec::with_capacity(l); // `g_coeffs = gi.coeffs`
@@ -45,7 +44,7 @@ pub fn inv_mod<F: FftField>(f: &P<F>, log_l: usize) -> P<F> {
         li = li << 1;
         let fi = f.mod_xk(li);
         let g2_high = if k < 7 {
-            hensel_lift(&fi, &gi)
+            hensel_lift(&fi, &gi, li >> 1)
         } else {
             hensel_lift_fft(&fi, &gi, li >> 1)
         };
@@ -97,15 +96,11 @@ fn middle_prod2<F: FftField>(n: usize, p1: &P<F>, p2: &P<F>) -> P<F> {
 /// computes
 /// `g2` such that `f.g2 = 1 mod X^2l`.
 /// Returns the upper half of `g2`.
-pub fn hensel_lift<F: FftField>(f: &P<F>, g1: &P<F>) -> P<F> {
-    let i = g1.degree() + 1; // mod X^{i-1}
-    let i2 = 2 * i;
-    assert_eq!(f.degree(), i2 - 1);
-
-    let g1sq = g1 * g1;
-    assert_eq!(g1sq.degree(), i2 - 2);
-    let f_g1sq_high = half_mul_mod(f, &g1sq, i2);
-    assert_eq!(f_g1sq_high.degree(), i - 1);
+pub fn hensel_lift<F: FftField>(f: &P<F>, g1: &P<F>, n: usize) -> P<F> {
+    debug_assert!(g1.degree() < n);
+    debug_assert!(f.degree() < 2 * n);
+    let g1sq = g1.naive_mul(g1);
+    let f_g1sq_high = half_mul_mod(f, &g1sq, 2 * n);
     let g2_high: Vec<F> = f_g1sq_high.coeffs.iter().map(|&c| -c).collect();
     let g2_high = P::from_coefficients_vec(g2_high);
     g2_high
@@ -179,7 +174,7 @@ mod tests {
         let log_l = 10;
         let l = 2usize.pow(log_l as u32);
         let f = P::<Fr>::rand(l - 1, rng);
-        let g = inv_mod(&f, log_l);
+        let g = inv_mod(&f, l);
         let fg = &f * &g;
         assert_eq!(fg.mod_xk(l), P::one())
     }
@@ -213,11 +208,11 @@ mod tests {
         let b = P::<Fr>::rand(n, rng);
 
         let _t_ark_div = start_timer!(|| format!("Arkworks division, deg = {m} / {n}"));
-        let res_ = crate::div(&a, &b);
+        let res_ = crate::tests::ark_div(&a, &b);
         end_timer!(_t_ark_div);
 
         let _t_div = start_timer!(|| format!("Custom division, deg = {m} / {n}"));
-        let (q, r) = div(&a, &b, log_l);
+        let (q, r) = div(&a, &b);
         end_timer!(_t_div);
 
         assert_eq!((q, r), res_);
