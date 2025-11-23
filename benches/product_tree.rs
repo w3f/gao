@@ -2,11 +2,10 @@ use ark_bls12_381::Fr;
 use ark_ff::FftField;
 use ark_poly::polynomial::DenseUVPolynomial;
 use ark_poly::Polynomial;
-use ark_std::iterable::Iterable;
 use ark_std::test_rng;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use gao::P;
-use gao::poly_div::{hensel_lift, hensel_lift_fft, inv_mod, rem};
+use gao::{Poly, P};
+use gao::poly_div::{hensel_lift, hensel_lift_fft, inv_mod};
 
 fn polynomial_mul<F: FftField>(c: &mut Criterion) {
     let rng = &mut test_rng();
@@ -41,7 +40,7 @@ fn polynomial_div<F: FftField>(c: &mut Criterion) {
         .map(|log_l| {
             let l = 2usize.pow(log_l as u32);
             let f = P::<F>::rand(l - 1, rng);
-            let g = inv_mod(&rem(&f, l / 2), log_l - 1);
+            let g = inv_mod(&f.mod_xk(l / 2), log_l - 1);
             (f, g, log_l)
         })
         .collect::<Vec<_>>();
@@ -52,7 +51,7 @@ fn polynomial_div<F: FftField>(c: &mut Criterion) {
         });
 
         group.bench_with_input(BenchmarkId::new("fft-lift", log_l), &(f, g), |b, (f, g)| {
-            b.iter(|| hensel_lift_fft(&f, &g))
+            b.iter(|| hensel_lift_fft(&f, &g, 1 << log_l))
         });
     }
 }
