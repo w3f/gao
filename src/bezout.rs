@@ -1,4 +1,4 @@
-use crate::{M, ME, P, PE};
+use crate::{Poly, M, ME, P, PE};
 use ark_ff::{FftField, Field, Zero};
 use ark_poly::{DenseUVPolynomial, EvaluationDomain, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain};
 use ark_poly::univariate::DenseOrSparsePolynomial;
@@ -79,11 +79,15 @@ fn quotient_sequence<F: FftField>(r0: &P<F>, r1: &P<F>) -> Vec<P<F>> {
     qs
 }
 
+pub fn eval_over_k<F: FftField>(k: usize, m: &M<F>) -> ME<F> {
+    let d = Radix2EvaluationDomain::new(k).unwrap();
+    m.iter().map(|pi: &P<F>| pi.evaluate_over_domain_by_ref(d))
+        .collect::<Vec<_>>().try_into().unwrap()
+}
+
 pub fn eval<F: FftField>(m: &M<F>) -> ME<F> {
     let deg2 = 2 * m[3].degree() + 1;
-    let d2 = Radix2EvaluationDomain::new(deg2).unwrap();
-    m.iter().map(|pi: &P<F>| pi.evaluate_over_domain_by_ref(d2))
-        .collect::<Vec<_>>().try_into().unwrap()
+    eval_over_k(deg2, m)
 }
 
 pub fn double<F: FftField>(m: &M<F>, m_evals: &ME<F>) -> ME<F> {
@@ -102,6 +106,18 @@ pub fn mul<F: FftField>(a: &M<F>, b: &M<F>) -> M<F> {
     let b = eval(b);
     let c = mul_evals(&a, &b);
     interpolate(&c)
+}
+
+pub fn coeff_at<F: FftField>(a: &M<F>, h: usize) -> M<F> {
+    a.iter().map(|p| {
+        let c = if p.degree() == h {
+            p.lc()
+        } else {
+            F::zero()
+        };
+        P::constant(c)
+    }).collect::<Vec<_>>()
+        .try_into().unwrap()
 }
 
 pub fn mul_evals<F: FftField>(a: &ME<F>, b: &ME<F>) -> ME<F> {

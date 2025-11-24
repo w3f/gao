@@ -1,8 +1,9 @@
-use crate::bezout::{double, eval, interpolate, mul, mul_evals, BezoutMatrix};
+use crate::bezout::{coeff_at, double, eval, eval_over_k, interpolate, mul, mul_evals, BezoutMatrix};
 use crate::{M, ME, P};
 use ark_ff::{FftField, Field, Zero};
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_std::iterable::Iterable;
 use crate::Poly;
 
 
@@ -119,7 +120,7 @@ pub fn simple_half_gcd2<F: FftField>(
         debug_assert!(p1.degree() <= 2);
         debug_assert_eq!(q1.degree() + 1, p1.degree());
         let B1 = BezoutMatrix::new(&p1, &q1).unwrap(); // B_{1; 2} = B_1
-        let B1_evals = eval(&B1.0);
+        let B1_evals = eval_over_k(1, &B1.0);
         return (B1, B1_evals);
     }
 
@@ -130,6 +131,7 @@ pub fn simple_half_gcd2<F: FftField>(
     debug_assert_eq!(p1.degree(), q1.degree() + 1);
     // println!("deg(P1) = {}, deg(Q1) = {}", p1.degree(), q1.degree());
     let (M1, M1_evals) = simple_half_gcd2(&p1, &q1, h); // `= B_{1; h+1}(p, q)`
+    assert_eq!(M1.degree(), h);
     let M1_cap = double(&M1.0, &M1_evals);
     let (p2, q2) = M1.apply(&p, &q); // `= B_{1; h+1} * A_1 = A_{h+1} = (r_h, r_{h+1})`
     // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
@@ -139,13 +141,21 @@ pub fn simple_half_gcd2<F: FftField>(
     // debug_assert_eq!(p2_tr.degree(), 2 * h);
     debug_assert_eq!(p2_tr.degree(), q2_tr.degree() + 1);
     let (M2, M2_evals) = simple_half_gcd2(&p2_tr, &q2_tr, h); // `= B_{1; h+1}(p2, q2)
+    assert_eq!(M2.degree(), h);
     let M2_cap = double(&M2.0, &M2_evals);
     // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
     let M2M1_cap = mul_evals(&M2_cap, &M1_cap);
-    let M2M1 = interpolate(&M2M1_cap);
+    let M1_h = coeff_at(&M1.0, h);
+    let M2_h = coeff_at(&M2.0, h);
+    let M2M1_h = mul(&M2_h, &M1_h);
+    let mut M2M1 = interpolate(&M2M1_cap);
+    assert_eq!(M2M1[3].degree(), k - 1);
+    let modulus = P::xk(k) - P::one();
+    for (i, lc_i) in M2M1_h.iter().enumerate() {
+        M2M1[i] += &(lc_i * &modulus);
+    }
     //`B_{h1+1; k+1}(p, q) * B_{1; h1+1}(p, q) = B_{1; k+1}(p, q)`
-    // (BezoutMatrix(M2M1), M2M1_cap)
-    (M2.compose(&M1), M2M1_cap)
+    (BezoutMatrix(M2M1), M2M1_cap)
 }
 
 // pub fn half_euclid2<F: FftField>(p: DensePolynomial<F>, q: DensePolynomial<F>, k: usize, max_deg: Option<usize>) -> BezoutMatrix<F> {
