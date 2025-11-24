@@ -1,11 +1,9 @@
-use crate::bezout::{coeff_at, double, eval, eval_over_k, interpolate, middle_prod, mul, mul_evals, BezoutMatrix};
+use crate::bezout::{coeff_at, double, eval_over_k, interpolate, middle_prod, mul, mul_evals, BezoutMatrix};
+use crate::Poly;
 use crate::{M, ME, P};
 use ark_ff::{FftField, Field, Zero};
-use ark_poly::univariate::DensePolynomial;
+use ark_poly::EvaluationDomain;
 use ark_poly::{DenseUVPolynomial, Polynomial};
-use ark_std::iterable::Iterable;
-use crate::Poly;
-
 
 /// For a degree `d` polynomial `p` removes its `i < d + 1` lower coefficients
 /// and returns a polynomial of degree `d - i` retaining `d - i + 1` higher coefficients.
@@ -106,10 +104,22 @@ fn split_pair<F: FftField>(p: &P<F>, q: &P<F>, h: usize) -> M<F> {
     res
 }
 
-fn truncated_pq<F: FftField>(M_evals: &ME<F>, p: &P<F>, q: &P<F>, h: usize) -> M<F> {
+fn conv<F: FftField>(a: &P<F>, b: &P<F>, d: usize, h: usize) -> F {
+    a.coeffs.iter()
+        .zip(b.coeffs[0..d - h + 1].iter().rev())
+        .map(|(&mi, pj)| mi * pj)
+        .take(h + 1)
+        .sum()
+}
+
+fn truncated_pq<F: FftField>(M: &M<F>, M_evals: &ME<F>, p: &P<F>, q: &P<F>, h: usize) -> (P<F>, P<F>) {
     let pq = split_pair(p, q, h);
-    let pq2 = middle_prod(h, &pq, M_evals);
-    pq2
+    let pq2_tr = middle_prod(h, &pq, M_evals);
+    let d = p.degree();
+    let extra_p = conv(&M[0], p, d, h) + conv(&M[1], q, d, h);
+    let p2_tr = &pq2_tr[0] + &pq2_tr[1].mul_xk(h) + &P::constant(extra_p).mul_xk(2 * h);
+    let q2_tr = &pq2_tr[2] + &pq2_tr[3].mul_xk(h);
+    (p2_tr, q2_tr)
 }
 
 /// Algorithm 2 from the article.
@@ -135,7 +145,7 @@ pub fn simple_half_gcd2<F: FftField>(
     }
 
     let h = k / 2;
-    println!("h = {h}");
+    // println!("h = {h}");
 
     let (p1, q1) = truncate_pair(&p, &q, h);
     debug_assert_eq!(p1.degree(), q1.degree() + 1);
@@ -143,18 +153,15 @@ pub fn simple_half_gcd2<F: FftField>(
     let (M1, M1_evals) = simple_half_gcd2(&p1, &q1, h); // `= B_{1; h+1}(p, q)`
     assert_eq!(M1.degree(), h);
     let M1_cap = double(&M1.0, &M1_evals);
-    let (p2, q2) = M1.apply(&p, &q); // `= B_{1; h+1} * A_1 = A_{h+1} = (r_h, r_{h+1})`
+    // let (p2, q2) = M1.apply(&p, &q); // `= B_{1; h+1} * A_1 = A_{h+1} = (r_h, r_{h+1})`
     // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
-    debug_assert_eq!(p2.degree(), d - h);
-    debug_assert_eq!(p2.degree(), q2.degree() + 1);
-    let (p2_tr, q2_tr) = truncate_pair(&p2, &q2, h);
+    // debug_assert_eq!(p2.degree(), d - h);
+    // debug_assert_eq!(p2.degree(), q2.degree() + 1);
 
-    let pq2_tr = truncated_pq(&M1_cap, &p, &q, h);
-    let p2_tr_ = &pq2_tr[0] + &pq2_tr[1].mul_xk(h);
-    let q2_tr_ = &pq2_tr[2] + &pq2_tr[3].mul_xk(h);
+    let (p2_tr, q2_tr) = truncated_pq(&M1.0, &M1_cap, &p, &q, h);
+    // let (p2_tr_, q2_tr_) = truncate_pair(&p2, &q2, h);
     // assert_eq!(p2_tr_, p2_tr);
     // assert_eq!(q2_tr_, q2_tr);
-
 
     // debug_assert_eq!(p2_tr.degree(), 2 * h);
     debug_assert_eq!(p2_tr.degree(), q2_tr.degree() + 1);
@@ -173,6 +180,7 @@ pub fn simple_half_gcd2<F: FftField>(
         M2M1[i] += &(lc_i * &modulus);
     }
     //`B_{h1+1; k+1}(p, q) * B_{1; h1+1}(p, q) = B_{1; k+1}(p, q)`
+    assert_eq!(M2M1_cap[3].domain().size(), k);
     (BezoutMatrix(M2M1), M2M1_cap)
 }
 
@@ -290,16 +298,38 @@ mod tests {
         // let B14 = B3.compose(&B2.compose(&B1));
     }
 
+
     #[test]
-    fn simple_half_gcd() {
+    fn test_simple_half_gcd1() {
         let rng = &mut test_rng();
-        let d = 128;
-        let k = d;
+        let d = 1024;
+
         let f = P::<Fr>::rand(d, rng);
         let g = P::<Fr>::rand(d - 1, rng);
         let _t_gcd = start_timer!(|| format!("Half-GCD for normal degree sequences, deg = {d}"));
+        let B = simple_half_gcd(&f, &g, d);
+        let (gcd, zero) = B.apply(&f, &g);
+        end_timer!(_t_gcd);
+        assert_eq!(zero.degree(), 0);
+
+        let _t_gcd = start_timer!(|| format!("EEA, deg = {d}"));
+        let (r, s, t) = gcd::euclid(&f, &g);
+        end_timer!(_t_gcd);
+        assert_eq!(gcd, r);
+        assert_eq!(B.0[0], s);
+        assert_eq!(B.0[1], t);
+    }
+
+    // cargo test test_simple_half_gcd --release --features="print-trace" -- --show-output
+    #[test]
+    fn test_simple_half_gcd2() {
+        let rng = &mut test_rng();
+        let d = 1024;
+        let k = d;
+        let f = P::<Fr>::rand(d, rng);
+        let g = P::<Fr>::rand(d - 1, rng);
+        let _t_gcd = start_timer!(|| format!("Half-GCD with FFTs, deg = {d}"));
         let (B, _) = simple_half_gcd2(&f.mul_xk(k), &g.mul_xk(k), k);
-        // assert_eq!(B, BezoutMatrix::new(&f, &g).unwrap());
         let (gcd, zero) = B.apply(&f, &g);
         end_timer!(_t_gcd);
         assert_eq!(zero.degree(), 0);

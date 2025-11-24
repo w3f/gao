@@ -1,6 +1,6 @@
-use crate::{Poly, M, ME, P, PE};
+use crate::{Poly, M, ME, P};
 use ark_ff::{FftField, Field, Zero};
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
 use ark_poly::univariate::DenseOrSparsePolynomial;
 use crate::poly_mul::double_evals;
 
@@ -134,7 +134,7 @@ pub fn middle_prod<F: FftField>(h: usize, a: &M<F>, b_evals: &ME<F>) -> M<F> {
     assert_eq!(a[3].degree(), 2 * h - 1);
     assert_eq!(b_evals[3].domain().size(), k);
     let a_evals = eval_over_k(k, a);
-    let c_evals = mul_evals(&a_evals, b_evals);
+    let c_evals = mul_evals(b_evals, &a_evals);
     let c = interpolate(&c_evals);
     assert_eq!(c_evals[3].domain().size(), k);
     c.iter().map(|p| p.div_xk(h))

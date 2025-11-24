@@ -82,9 +82,9 @@ pub fn double_evals<F: FftField>(p: &P<F>, p_evals: &PE<F>) -> PE<F> {
     let w = domain_2x.group_gen();
     let coset = p_evals.domain().get_coset(w).unwrap();
 
-    let _t_coset_fft = start_timer!(|| format!("Coset FFT, n = {n}"));
+    // let _t_coset_fft = start_timer!(|| format!("Coset FFT, n = {n}"));
     let pw_ewals = p.evaluate_over_domain_by_ref(coset);
-    end_timer!(_t_coset_fft);
+    // end_timer!(_t_coset_fft);
 
     let evals_2x = interleave(&p_evals.evals, &pw_ewals.evals);
     let evals_2x = PE::from_vec_and_domain(evals_2x, domain_2x);

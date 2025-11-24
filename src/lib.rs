@@ -10,7 +10,7 @@ pub mod poly_mul;
 pub mod product_tree;
 pub mod poly_div;
 
-use ark_ff::{FftField, Field};
+use ark_ff::{FftField, Field, Zero};
 use ark_poly::{DenseUVPolynomial, Evaluations, Polynomial, Radix2EvaluationDomain};
 use ark_poly::univariate::DensePolynomial;
 
@@ -62,7 +62,11 @@ impl<F: FftField> Poly<F> for P<F> {
     }
 
     fn div_xk(&self, k: usize) -> Self {
-        self.slice(k, self.coeffs.len())
+        if k > self.degree() {
+            Self::zero()
+        } else {
+            self.slice(k, self.coeffs.len())
+        }
     }
 
     fn mod_xk(&self, k: usize) -> Self {
