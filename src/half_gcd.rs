@@ -1,8 +1,10 @@
-use crate::bezout::BezoutMatrix;
-use crate::P;
+use crate::bezout::{double, eval, interpolate, mul, mul_evals, BezoutMatrix};
+use crate::{M, ME, P};
 use ark_ff::{FftField, Field, Zero};
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::{DenseUVPolynomial, Polynomial};
+use crate::Poly;
+
 
 /// For a degree `d` polynomial `p` removes its `i < d + 1` lower coefficients
 /// and returns a polynomial of degree `d - i` retaining `d - i + 1` higher coefficients.
@@ -37,20 +39,24 @@ fn truncate_pair<F: Field>(p: &P<F>, q: &P<F>, k: usize) -> (P<F>, P<F>) {
     }
 }
 
+/// Algorithm 1 from the article.
 /// Works for "normal degree sequences" only.
 pub fn simple_half_gcd<F: FftField>(
-    p: &DensePolynomial<F>,
-    q: &DensePolynomial<F>,
+    p: &P<F>,
+    q: &P<F>,
     k: usize,
 ) -> BezoutMatrix<F> {
     let d = p.degree();
     // println!("k = {k}, deg(P) = {d}, deg(Q) = {}", q.degree());
-    assert!(k <= d && k > 0);
-    assert!(q.degree() < d);
+    assert_eq!(d, q.degree() + 1);
+    assert!(k > 0);
+    assert!(d >= k);
 
     if k == 1 {
-        let (p1, q1) = truncate_pair(p, q, k);
-        return BezoutMatrix::new(&p1, &q1).unwrap();
+        let (p1, q1) = truncate_pair(p, q, 1);
+        debug_assert!(p1.degree() <= 2);
+        debug_assert_eq!(q1.degree() + 1, p1.degree());
+        return BezoutMatrix::new(&p1, &q1).unwrap(); // B_{1; 2} = B_1
     }
 
     let h1 = k.div_ceil(2);
@@ -58,16 +64,88 @@ pub fn simple_half_gcd<F: FftField>(
     // println!("h1 = {h1}, h2 = {h2}");
 
     let (p1, q1) = truncate_pair(&p, &q, h1);
+    debug_assert_eq!(p1.degree(), q1.degree() + 1);
     // println!("deg(P1) = {}, deg(Q1) = {}", p1.degree(), q1.degree());
     let m1 = simple_half_gcd(&p1, &q1, h1); // `= B_{1; h1+1}(p, q)`
     let (p2, q2) = m1.apply(&p, &q); // `= B_{1; h1+1} * A_1 = A_{h1+1} = (r_h1, r_{h1+1})`
-                                     // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
-                                     // assert_eq!(p2.degree(), d - h1); // `deg(r_i) = d - i`
-    let (p2, q2) = truncate_pair(&p2, &q2, h2);
-    let m2 = simple_half_gcd(&p2, &q2, h2); // `= B_{1; h2+1}(p2, q2)
-                                            // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
+    // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
+    debug_assert_eq!(p2.degree(), d - h1); // `deg(r_i) = d - i`
+    debug_assert_eq!(p2.degree(), q2.degree() + 1);
+    let (p2_tr, q2_tr) = truncate_pair(&p2, &q2, h2);
+    let m2 = simple_half_gcd(&p2_tr, &q2_tr, h2); // `= B_{1; h2+1}(p2', q2') = B_{1; h2+1}(p2, q2) by the lemma
+    // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
     m2.compose(&m1)
     //`B_{h1+1; k+1}(p, q) * B_{1; h1+1}(p, q) = B_{1; k+1}(p, q)`
+}
+
+fn split_one<F: FftField>(f: &P<F>, d: usize, h: usize) -> [P<F>; 3] {
+    f.coeffs[d - 4 * h..].chunks(h)
+        .map(|coeffs| P::with_coeffs(coeffs.to_vec()))
+        .take(3)
+        .collect::<Vec<_>>()
+        .try_into().unwrap()
+}
+
+fn split_pair<F: FftField>(p: &P<F>, q: &P<F>, h: usize) -> M<F> {
+    let d = p.degree();
+    debug_assert!(h > 0);
+    debug_assert_eq!(d, q.degree() + 1);
+    debug_assert!(d >= 4 * h); // d >= 2k = 4h
+    let p_chunks = split_one(p, d, h);
+    let q_chunks = split_one(q, d, h);
+    [
+        &p_chunks[0] + &p_chunks[0].mul_xk(h),
+        &p_chunks[1] + &p_chunks[2].mul_xk(h),
+        &q_chunks[0] + &q_chunks[0].mul_xk(h),
+        &q_chunks[1] + &q_chunks[2].mul_xk(h),
+    ]
+}
+
+/// Algorithm 2 from the article.
+/// Works for "normal degree sequences" and `k=2^l`.
+pub fn simple_half_gcd2<F: FftField>(
+    p: &P<F>,
+    q: &P<F>,
+    k: usize,
+) -> (BezoutMatrix<F>, ME<F>) {
+    let d = p.degree();
+    // println!("k = {k}, deg(P) = {d}, deg(Q) = {}", q.degree());
+    assert_eq!(d, q.degree() + 1);
+    assert!(k > 0);
+    assert!(d >= k);
+
+    if k == 1 {
+        let (p1, q1) = truncate_pair(p, q, 1);
+        debug_assert!(p1.degree() <= 2);
+        debug_assert_eq!(q1.degree() + 1, p1.degree());
+        let B1 = BezoutMatrix::new(&p1, &q1).unwrap(); // B_{1; 2} = B_1
+        let B1_evals = eval(&B1.0);
+        return (B1, B1_evals);
+    }
+
+    let h = k / 2;
+    println!("h = {h}");
+
+    let (p1, q1) = truncate_pair(&p, &q, h);
+    debug_assert_eq!(p1.degree(), q1.degree() + 1);
+    // println!("deg(P1) = {}, deg(Q1) = {}", p1.degree(), q1.degree());
+    let (M1, M1_evals) = simple_half_gcd2(&p1, &q1, h); // `= B_{1; h+1}(p, q)`
+    let M1_cap = double(&M1.0, &M1_evals);
+    let (p2, q2) = M1.apply(&p, &q); // `= B_{1; h+1} * A_1 = A_{h+1} = (r_h, r_{h+1})`
+    // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
+    debug_assert_eq!(p2.degree(), d - h);
+    debug_assert_eq!(p2.degree(), q2.degree() + 1);
+    let (p2_tr, q2_tr) = truncate_pair(&p2, &q2, h);
+    // debug_assert_eq!(p2_tr.degree(), 2 * h);
+    debug_assert_eq!(p2_tr.degree(), q2_tr.degree() + 1);
+    let (M2, M2_evals) = simple_half_gcd2(&p2_tr, &q2_tr, h); // `= B_{1; h+1}(p2, q2)
+    let M2_cap = double(&M2.0, &M2_evals);
+    // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
+    let M2M1_cap = mul_evals(&M2_cap, &M1_cap);
+    let M2M1 = interpolate(&M2M1_cap);
+    //`B_{h1+1; k+1}(p, q) * B_{1; h1+1}(p, q) = B_{1; k+1}(p, q)`
+    // (BezoutMatrix(M2M1), M2M1_cap)
+    (M2.compose(&M1), M2M1_cap)
 }
 
 // pub fn half_euclid2<F: FftField>(p: DensePolynomial<F>, q: DensePolynomial<F>, k: usize, max_deg: Option<usize>) -> BezoutMatrix<F> {
@@ -187,11 +265,13 @@ mod tests {
     #[test]
     fn simple_half_gcd() {
         let rng = &mut test_rng();
-        let d = 1023;
+        let k = 128;
+        let d = 2 * k;
         let f = P::<Fr>::rand(d, rng);
         let g = P::<Fr>::rand(d - 1, rng);
         let _t_gcd = start_timer!(|| format!("Half-GCD for normal degree sequences, deg = {d}"));
-        let B = super::simple_half_gcd(&f, &g, d);
+        let (B, _) = simple_half_gcd2(&f, &g, 2 * k);
+        // assert_eq!(B, BezoutMatrix::new(&f, &g).unwrap());
         let (gcd, zero) = B.apply(&f, &g);
         end_timer!(_t_gcd);
         assert_eq!(zero.degree(), 0);

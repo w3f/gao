@@ -1,7 +1,8 @@
-use crate::{M, ME, P};
+use crate::{M, ME, P, PE};
 use ark_ff::{FftField, Field, Zero};
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain};
 use ark_poly::univariate::DenseOrSparsePolynomial;
+use crate::poly_mul::double_evals;
 
 /// Represents a Bezout matrix `B_i` or a composition of Bezout matrices `B_ij = B_{j-1}*...*B_i`.
 #[derive(Debug, PartialEq)] // todo
@@ -78,10 +79,16 @@ fn quotient_sequence<F: FftField>(r0: &P<F>, r1: &P<F>) -> Vec<P<F>> {
     qs
 }
 
-pub fn eval<F: FftField>(a: &M<F>) -> ME<F> {
-    let deg2 = 2 * a[3].degree() + 1;
+pub fn eval<F: FftField>(m: &M<F>) -> ME<F> {
+    let deg2 = 2 * m[3].degree() + 1;
     let d2 = Radix2EvaluationDomain::new(deg2).unwrap();
-    a.iter().map(|pi: &P<F>| pi.evaluate_over_domain_by_ref(d2))
+    m.iter().map(|pi: &P<F>| pi.evaluate_over_domain_by_ref(d2))
+        .collect::<Vec<_>>().try_into().unwrap()
+}
+
+pub fn double<F: FftField>(m: &M<F>, m_evals: &ME<F>) -> ME<F> {
+    m.iter().zip(m_evals.iter())
+        .map(|(pi, evals_i)| double_evals(pi, evals_i))
         .collect::<Vec<_>>().try_into().unwrap()
 }
 
@@ -93,13 +100,17 @@ pub fn interpolate<F: FftField>(a: &ME<F>) -> M<F> {
 pub fn mul<F: FftField>(a: &M<F>, b: &M<F>) -> M<F> {
     let a = eval(a);
     let b = eval(b);
-    let c: ME<F> = [
+    let c = mul_evals(&a, &b);
+    interpolate(&c)
+}
+
+pub fn mul_evals<F: FftField>(a: &ME<F>, b: &ME<F>) -> ME<F> {
+    [
         &(&a[0] * &b[0]) + &(&a[1] * &b[2]),
         &(&a[0] * &b[1]) + &(&a[1] * &b[3]),
         &(&a[2] * &b[0]) + &(&a[3] * &b[2]),
         &(&a[2] * &b[1]) + &(&a[3] * &b[3]),
-    ];
-    interpolate(&c)
+    ]
 }
 
 
