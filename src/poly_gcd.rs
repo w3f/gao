@@ -39,6 +39,8 @@ impl<F: FftField> PM<F> {
     }
 }
 
+// TODO: for d = 64 textbook EEA is faster
+
 /// *Algorithm 4* from the paper.
 ///
 /// The input is `(P, Q), deg(Q) < deg(P) = d` and `k <= d`.
@@ -102,7 +104,7 @@ pub fn eea<F: FftField>(p: &P<F>, q: &P<F>, k: usize) -> (PM<F>, Vec<P<F>>) {
         let (p_t, q_t) = truncate(p, q, 1);
         debug_assert!(p_t.degree() <= 2);
         debug_assert_eq!(p_t.degree(), q_t.degree() + 1); //TODO: remove
-                                                          // let (p_t, q_t) = (p , q);
+        // let (p_t, q_t) = (p , q);
         let q = p_t / q_t; //TODO: specify div
         let minus_q = -q.clone();
         let Q = PM::quotient(minus_q); // `B[1] = B[1,2)(P, Q)`
@@ -363,8 +365,15 @@ mod tests {
     // cargo test bench_eea --release --features="print-trace" -- --show-output
     #[test]
     fn bench_eea() {
+        for log_d in 4..=10 {
+            let d = 2usize.pow(log_d);
+            println!("d = {d}");
+            _bench_eea(d);
+            println!("\n")
+        }
+    }
+    fn _bench_eea(d: usize) {
         let rng = &mut test_rng();
-        let d = 1024;
 
         let f = crate::P::<Fr>::rand(d, rng);
         let g = crate::P::<Fr>::rand(d - 1, rng);
@@ -396,3 +405,79 @@ mod tests {
         end_timer!(_t_alg_4);
     }
 }
+
+// d = 16
+// Start:   EEA, deg = 16
+// ··End:     EEA, deg = 16 ...........................................................310.833µs
+// Start:   Half-GCD, deg = 16, k = 16
+// ··End:     Half-GCD, deg = 16, k = 16 ..............................................693.459µs
+// Start:   FFT-Half-GCD, deg = 16, k = 16
+// ··End:     FFT-Half-GCD, deg = 16, k = 16 ..........................................910.792µs
+// Start:   Generic Half-GCD, deg = 16, k = 16
+// ··End:     Generic Half-GCD, deg = 16, k = 16 ......................................650.750µs
+//
+//
+// d = 32
+// Start:   EEA, deg = 32
+// ··End:     EEA, deg = 32 ...........................................................731.416µs
+// Start:   Half-GCD, deg = 32, k = 32
+// ··End:     Half-GCD, deg = 32, k = 32 ..............................................1.489ms
+// Start:   FFT-Half-GCD, deg = 32, k = 32
+// ··End:     FFT-Half-GCD, deg = 32, k = 32 ..........................................1.836ms
+// Start:   Generic Half-GCD, deg = 32, k = 32
+// ··End:     Generic Half-GCD, deg = 32, k = 32 ......................................1.471ms
+//
+//
+// d = 64
+// Start:   EEA, deg = 64
+// ··End:     EEA, deg = 64 ...........................................................2.239ms
+// Start:   Half-GCD, deg = 64, k = 64
+// ··End:     Half-GCD, deg = 64, k = 64 ..............................................3.362ms
+// Start:   FFT-Half-GCD, deg = 64, k = 64
+// ··End:     FFT-Half-GCD, deg = 64, k = 64 ..........................................4.019ms
+// Start:   Generic Half-GCD, deg = 64, k = 64
+// ··End:     Generic Half-GCD, deg = 64, k = 64 ......................................3.319ms
+//
+//
+// d = 128
+// Start:   EEA, deg = 128
+// ··End:     EEA, deg = 128 ..........................................................7.909ms
+// Start:   Half-GCD, deg = 128, k = 128
+// ··End:     Half-GCD, deg = 128, k = 128 ............................................7.658ms
+// Start:   FFT-Half-GCD, deg = 128, k = 128
+// ··End:     FFT-Half-GCD, deg = 128, k = 128 ........................................8.242ms
+// Start:   Generic Half-GCD, deg = 128, k = 128
+// ··End:     Generic Half-GCD, deg = 128, k = 128 ....................................7.625ms
+//
+//
+// d = 256
+// Start:   EEA, deg = 256
+// ··End:     EEA, deg = 256 ..........................................................30.984ms
+// Start:   Half-GCD, deg = 256, k = 256
+// ··End:     Half-GCD, deg = 256, k = 256 ............................................17.253ms
+// Start:   FFT-Half-GCD, deg = 256, k = 256
+// ··End:     FFT-Half-GCD, deg = 256, k = 256 ........................................17.066ms
+// Start:   Generic Half-GCD, deg = 256, k = 256
+// ··End:     Generic Half-GCD, deg = 256, k = 256 ....................................17.356ms
+//
+//
+// d = 512
+// Start:   EEA, deg = 512
+// ··End:     EEA, deg = 512 ..........................................................157.896ms
+// Start:   Half-GCD, deg = 512, k = 512
+// ··End:     Half-GCD, deg = 512, k = 512 ............................................38.843ms
+// Start:   FFT-Half-GCD, deg = 512, k = 512
+// ··End:     FFT-Half-GCD, deg = 512, k = 512 ........................................35.496ms
+// Start:   Generic Half-GCD, deg = 512, k = 512
+// ··End:     Generic Half-GCD, deg = 512, k = 512 ....................................39.103ms
+//
+//
+// d = 1024
+// Start:   EEA, deg = 1024
+// ··End:     EEA, deg = 1024 .........................................................698.373ms
+// Start:   Half-GCD, deg = 1024, k = 1024
+// ··End:     Half-GCD, deg = 1024, k = 1024 ..........................................86.754ms
+// Start:   FFT-Half-GCD, deg = 1024, k = 1024
+// ··End:     FFT-Half-GCD, deg = 1024, k = 1024 ......................................73.972ms
+// Start:   Generic Half-GCD, deg = 1024, k = 1024
+// ··End:     Generic Half-GCD, deg = 1024, k = 1024 ..................................87.266ms
