@@ -1,4 +1,3 @@
-use crate::half_gcd::simple_half_gcd;
 use crate::interpolation::{z_xs, Domain};
 use crate::P;
 use ark_ff::{FftField, Zero};
@@ -95,8 +94,8 @@ pub fn decode<F: FftField>(b: &[(usize, F)], k: usize, n: usize) -> Result<P<F>,
     assert_eq!(s1.degree(), d - 2);
 
     let h = (d + 1) / 2;
-    let _t_gcd = start_timer!(|| format!("Half-GCD for normal degree sequences, deg = {}", d - 1));
-    let B = simple_half_gcd(&s0, &s1, d - h);
+    let _t_gcd = start_timer!(|| format!("Half-GCD, deg = {}", d - 1));
+    let (B, _) = crate::poly_gcd::eea(&s0, &s1, d - h);
     let (_, g) = B.apply(&s0, &s1);
     end_timer!(_t_gcd);
     assert!(g.degree() < h - 1);
@@ -125,6 +124,8 @@ mod tests {
     use ark_std::{test_rng, UniformRand};
 
     // RUST_BACKTRACE=1 cargo test gaos_decoder --release --features="print-trace" -- --show-output
+    // Half-GCD for normal degree sequences, deg = 232 .......................8.800ms
+    // RS decoding, (k,n,s,t) = (668,1000,100,116) .............................14.454ms
     #[test]
     fn gaos_decoder() {
         let rng = &mut test_rng();

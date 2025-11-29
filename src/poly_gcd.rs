@@ -4,7 +4,7 @@ use ark_poly::Polynomial;
 
 /// 2x2 matrix with polynomial entries, sometimes viewed as a polynomial with matrix coefficients.
 #[derive(Debug, PartialEq)]
-pub struct PM<F: FftField>(M<F>);
+pub struct PM<F: FftField>(pub M<F>);
 
 impl<F: FftField> PM<F> {
     pub fn id() -> Self {
