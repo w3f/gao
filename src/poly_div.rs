@@ -1,18 +1,18 @@
 use crate::Poly;
 use crate::P;
 use ark_ff::FftField;
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain};
+use ark_poly::{
+    DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial,
+    Radix2EvaluationDomain,
+};
 use std::iter;
 
 /// `X^k.a(1/X)`
 fn rev<F: FftField>(k: usize, a: &P<F>) -> P<F> {
     let d = a.degree();
     debug_assert!(k >= d);
-    let zeros = iter::repeat(F::zero())
-        .take(k - d);
-    let a_coeffs_rev = a.coeffs().iter()
-        .copied()
-        .rev();
+    let zeros = iter::repeat(F::zero()).take(k - d);
+    let a_coeffs_rev = a.coeffs().iter().copied().rev();
     let a_rev_coeffs: Vec<F> = zeros.chain(a_coeffs_rev).collect();
     let a_rev = P::from_coefficients_vec(a_rev_coeffs);
     a_rev
@@ -278,7 +278,6 @@ mod tests {
     //
     //     assert_eq!(fg2, fg2_);
     // }
-
 
     // #[test]
     // fn test_fft() {

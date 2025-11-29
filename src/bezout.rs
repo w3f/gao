@@ -1,8 +1,8 @@
+use crate::poly_mul::double_evals;
 use crate::{Poly, M, ME, P};
 use ark_ff::{FftField, Field, Zero};
-use ark_poly::{DenseUVPolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
 use ark_poly::univariate::DenseOrSparsePolynomial;
-use crate::poly_mul::double_evals;
+use ark_poly::{DenseUVPolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
 
 /// Represents a Bezout matrix `B_i` or a composition of Bezout matrices `B_ij = B_{j-1}*...*B_i`.
 #[derive(Debug, PartialEq)] // todo
@@ -81,8 +81,11 @@ fn quotient_sequence<F: FftField>(r0: &P<F>, r1: &P<F>) -> Vec<P<F>> {
 
 pub fn eval_over_k<F: FftField>(k: usize, m: &M<F>) -> ME<F> {
     let d = Radix2EvaluationDomain::new(k).unwrap();
-    m.iter().map(|pi: &P<F>| pi.evaluate_over_domain_by_ref(d))
-        .collect::<Vec<_>>().try_into().unwrap()
+    m.iter()
+        .map(|pi: &P<F>| pi.evaluate_over_domain_by_ref(d))
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
 pub fn eval<F: FftField>(m: &M<F>) -> ME<F> {
@@ -91,14 +94,20 @@ pub fn eval<F: FftField>(m: &M<F>) -> ME<F> {
 }
 
 pub fn double<F: FftField>(m: &M<F>, m_evals: &ME<F>) -> ME<F> {
-    m.iter().zip(m_evals.iter())
+    m.iter()
+        .zip(m_evals.iter())
         .map(|(pi, evals_i)| double_evals(pi, evals_i))
-        .collect::<Vec<_>>().try_into().unwrap()
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
 pub fn interpolate<F: FftField>(a: &ME<F>) -> M<F> {
-    a.iter().map(|ei| ei.interpolate_by_ref())
-        .collect::<Vec<_>>().try_into().unwrap()
+    a.iter()
+        .map(|ei| ei.interpolate_by_ref())
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
 pub fn mul<F: FftField>(a: &M<F>, b: &M<F>) -> M<F> {
@@ -109,15 +118,14 @@ pub fn mul<F: FftField>(a: &M<F>, b: &M<F>) -> M<F> {
 }
 
 pub fn coeff_at<F: FftField>(a: &M<F>, h: usize) -> M<F> {
-    a.iter().map(|p| {
-        let c = if p.degree() == h {
-            p.lc()
-        } else {
-            F::zero()
-        };
-        P::constant(c)
-    }).collect::<Vec<_>>()
-        .try_into().unwrap()
+    a.iter()
+        .map(|p| {
+            let c = if p.degree() == h { p.lc() } else { F::zero() };
+            P::constant(c)
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
 pub fn mul_evals<F: FftField>(a: &ME<F>, b: &ME<F>) -> ME<F> {
@@ -137,9 +145,11 @@ pub fn middle_prod<F: FftField>(h: usize, a: &M<F>, b_evals: &ME<F>) -> M<F> {
     let c_evals = mul_evals(b_evals, &a_evals);
     let c = interpolate(&c_evals);
     assert_eq!(c_evals[3].domain().size(), k);
-    c.iter().map(|p| p.div_xk(h))
+    c.iter()
+        .map(|p| p.div_xk(h))
         .collect::<Vec<_>>()
-        .try_into().unwrap()
+        .try_into()
+        .unwrap()
 }
 
 pub fn matrix_product_tree<F: FftField>(bs: &[M<F>]) -> M<F> {
@@ -155,14 +165,13 @@ pub fn matrix_product_tree<F: FftField>(bs: &[M<F>]) -> M<F> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use crate::gcd::euclid;
     use ark_bls12_381::Fr;
     use ark_std::{end_timer, start_timer, test_rng};
-    use crate::gcd::euclid;
 
     #[test]
     fn test_bezout_matrices() {
@@ -199,7 +208,8 @@ mod tests {
         let r0 = P::<Fr>::rand(2, rng);
         let r1 = P::<Fr>::rand(1, rng);
 
-        let bis = quotient_sequence(&r0, &r1).iter()
+        let bis = quotient_sequence(&r0, &r1)
+            .iter()
             .map(|qi| BezoutMatrix::from_minus_quotient(-qi.clone()).unwrap())
             .collect::<Vec<_>>();
 
@@ -224,7 +234,8 @@ mod tests {
 
         let _t_fft_gcd = start_timer!(|| format!("fft EEA, deg = {d}"));
         let qs = quotient_sequence(&f, &g);
-        let bs = qs.iter()
+        let bs = qs
+            .iter()
             .map(|qi| BezoutMatrix::from_minus_quotient(-qi.clone()).unwrap().0)
             .collect::<Vec<_>>();
 

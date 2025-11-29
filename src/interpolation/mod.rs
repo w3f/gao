@@ -35,9 +35,7 @@ pub fn z_xs<F: FftField>(xs: &[F]) -> FftPoly<F> {
             let (mut l, mut r) = if n < 256 {
                 (z_xs(&xs[0..h]), z_xs(&xs[h..n]))
             } else {
-                rayon::join(
-                    || z_xs(&xs[0..h]),
-                    || z_xs(&xs[h..n]))
+                rayon::join(|| z_xs(&xs[0..h]), || z_xs(&xs[h..n]))
             };
             FftPoly::mul(&mut l, &mut r)
         }

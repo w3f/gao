@@ -1,4 +1,6 @@
-use crate::bezout::{coeff_at, double, eval_over_k, interpolate, middle_prod, mul, mul_evals, BezoutMatrix};
+use crate::bezout::{
+    coeff_at, double, eval_over_k, interpolate, middle_prod, mul, mul_evals, BezoutMatrix,
+};
 use crate::Poly;
 use crate::{M, ME, P};
 use ark_ff::{FftField, Field, Zero};
@@ -40,11 +42,7 @@ fn truncate_pair<F: Field>(p: &P<F>, q: &P<F>, k: usize) -> (P<F>, P<F>) {
 
 /// Algorithm 1 from the article.
 /// Works for "normal degree sequences" only.
-pub fn simple_half_gcd<F: FftField>(
-    p: &P<F>,
-    q: &P<F>,
-    k: usize,
-) -> BezoutMatrix<F> {
+pub fn simple_half_gcd<F: FftField>(p: &P<F>, q: &P<F>, k: usize) -> BezoutMatrix<F> {
     let d = p.degree();
     // println!("k = {k}, deg(P) = {d}, deg(Q) = {}", q.degree());
     assert_eq!(d, q.degree() + 1);
@@ -67,18 +65,19 @@ pub fn simple_half_gcd<F: FftField>(
     // println!("deg(P1) = {}, deg(Q1) = {}", p1.degree(), q1.degree());
     let m1 = simple_half_gcd(&p1, &q1, h1); // `= B_{1; h1+1}(p, q)`
     let (p2, q2) = m1.apply(&p, &q); // `= B_{1; h1+1} * A_1 = A_{h1+1} = (r_h1, r_{h1+1})`
-    // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
+                                     // println!("deg(P2) = {}, deg(Q2) = {}", p2.degree(), q2.degree());
     debug_assert_eq!(p2.degree(), d - h1); // `deg(r_i) = d - i`
     debug_assert_eq!(p2.degree(), q2.degree() + 1);
     let (p2_tr, q2_tr) = truncate_pair(&p2, &q2, h2);
     let m2 = simple_half_gcd(&p2_tr, &q2_tr, h2); // `= B_{1; h2+1}(p2', q2') = B_{1; h2+1}(p2, q2) by the lemma
-    // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
+                                                  // But `deg(p2) = d - h1`, so B_{1; h2+1}(p2, q2) = B_{1+h1; h2+1+h1}(p, q)
     m2.compose(&m1)
     //`B_{h1+1; k+1}(p, q) * B_{1; h1+1}(p, q) = B_{1; k+1}(p, q)`
 }
 
 fn split_one<F: FftField>(f: &P<F>, d: usize, h: usize) -> [P<F>; 3] {
-    let res = f.coeffs[d - 4 * h..].chunks(h)
+    let res = f.coeffs[d - 4 * h..]
+        .chunks(h)
         .map(|coeffs| P::with_coeffs(coeffs.to_vec()))
         .take(3)
         .collect::<Vec<_>>();
@@ -105,14 +104,21 @@ fn split_pair<F: FftField>(p: &P<F>, q: &P<F>, h: usize) -> M<F> {
 }
 
 fn conv<F: FftField>(a: &P<F>, b: &P<F>, d: usize, h: usize) -> F {
-    a.coeffs.iter()
+    a.coeffs
+        .iter()
         .zip(b.coeffs[0..d - h + 1].iter().rev())
         .map(|(&mi, pj)| mi * pj)
         .take(h + 1)
         .sum()
 }
 
-fn truncated_pq<F: FftField>(M: &M<F>, M_evals: &ME<F>, p: &P<F>, q: &P<F>, h: usize) -> (P<F>, P<F>) {
+fn truncated_pq<F: FftField>(
+    M: &M<F>,
+    M_evals: &ME<F>,
+    p: &P<F>,
+    q: &P<F>,
+    h: usize,
+) -> (P<F>, P<F>) {
     let pq = split_pair(p, q, h);
     let pq2_tr = middle_prod(h, &pq, M_evals);
     let d = p.degree();
@@ -124,11 +130,7 @@ fn truncated_pq<F: FftField>(M: &M<F>, M_evals: &ME<F>, p: &P<F>, q: &P<F>, h: u
 
 /// Algorithm 2 from the article.
 /// Works for "normal degree sequences" and `k=2^l`.
-pub fn simple_half_gcd2<F: FftField>(
-    p: &P<F>,
-    q: &P<F>,
-    k: usize,
-) -> (BezoutMatrix<F>, ME<F>) {
+pub fn simple_half_gcd2<F: FftField>(p: &P<F>, q: &P<F>, k: usize) -> (BezoutMatrix<F>, ME<F>) {
     let d = p.degree();
     // println!("k = {k}, deg(P) = {d}, deg(Q) = {}", q.degree());
     assert_eq!(d, q.degree() + 1);
@@ -297,7 +299,6 @@ mod tests {
         //
         // let B14 = B3.compose(&B2.compose(&B1));
     }
-
 
     #[test]
     fn test_simple_half_gcd1() {

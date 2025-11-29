@@ -6,16 +6,16 @@ mod gcd;
 pub mod half_gcd;
 pub mod interpolation;
 pub mod lagrange;
-pub mod poly_mul;
-pub mod product_tree;
 pub mod poly_div;
 mod poly_gcd;
+pub mod poly_mul;
+pub mod product_tree;
 
+use ark_ff::{FftField, Field, Zero};
+use ark_poly::univariate::DensePolynomial;
+use ark_poly::{DenseUVPolynomial, Evaluations, Polynomial, Radix2EvaluationDomain};
 use std::ops::RangeBounds;
 use std::slice::SliceIndex;
-use ark_ff::{FftField, Field, Zero};
-use ark_poly::{DenseUVPolynomial, Evaluations, Polynomial, Radix2EvaluationDomain};
-use ark_poly::univariate::DensePolynomial;
 
 pub type P<F> = DensePolynomial<F>;
 pub type PE<F> = Evaluations<F, Radix2EvaluationDomain<F>>;

@@ -34,9 +34,7 @@ impl<F: FftField> FftPoly<F> {
 
     #[cfg(feature = "parallel")]
     fn get_evals(a: &FftPoly<F>, b: &FftPoly<F>, ab_degree: usize) -> (PE<F>, PE<F>) {
-        rayon::join(
-            || a.evals_for(ab_degree),
-            || b.evals_for(ab_degree))
+        rayon::join(|| a.evals_for(ab_degree), || b.evals_for(ab_degree))
     }
 
     #[cfg(not(feature = "parallel"))]

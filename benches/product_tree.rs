@@ -4,8 +4,8 @@ use ark_poly::polynomial::DenseUVPolynomial;
 use ark_poly::Polynomial;
 use ark_std::test_rng;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use gao::{Poly, P};
 use gao::poly_div::{hensel_lift, hensel_lift_fft, inv_mod};
+use gao::{Poly, P};
 
 fn polynomial_mul<F: FftField>(c: &mut Criterion) {
     let rng = &mut test_rng();
@@ -46,9 +46,11 @@ fn polynomial_div<F: FftField>(c: &mut Criterion) {
         .collect::<Vec<_>>();
 
     for (f, g, log_l) in inputs.iter() {
-        group.bench_with_input(BenchmarkId::new("quadratic-lift", log_l), &(f, g), |b, (f, g)| {
-            b.iter(|| hensel_lift(&f, &g,1 << log_l))
-        });
+        group.bench_with_input(
+            BenchmarkId::new("quadratic-lift", log_l),
+            &(f, g),
+            |b, (f, g)| b.iter(|| hensel_lift(&f, &g, 1 << log_l)),
+        );
 
         group.bench_with_input(BenchmarkId::new("fft-lift", log_l), &(f, g), |b, (f, g)| {
             b.iter(|| hensel_lift_fft(&f, &g, 1 << log_l))
@@ -56,7 +58,8 @@ fn polynomial_div<F: FftField>(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches,
+criterion_group!(
+    benches,
     // polynomial_mul::<Fr>,
     polynomial_div::<Fr>,
 );

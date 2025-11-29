@@ -8,27 +8,18 @@ pub struct PM<F: FftField>(pub M<F>);
 
 impl<F: FftField> PM<F> {
     pub fn id() -> Self {
-        Self([
-            P::one(), P::zero(),
-            P::zero(), P::one(),
-        ])
+        Self([P::one(), P::zero(), P::zero(), P::one()])
     }
 
     /// Let `-q = -(r0 / r1)`.
     /// Then `Q(-q) * (r0, r1)T = (r1, r2)T`,
     /// where `r2 = r0 - (r0/r1).r1 = r0 mod r1`.
     pub fn quotient(minus_q: P<F>) -> Self {
-        Self([
-            P::zero(), P::one(),
-            P::one(), minus_q,
-        ])
+        Self([P::zero(), P::one(), P::one(), minus_q])
     }
 
     pub fn deg(&self) -> usize {
-        self.0.iter()
-            .map(|p| p.degree())
-            .max()
-            .unwrap()
+        self.0.iter().map(|p| p.degree()).max().unwrap()
     }
 
     pub fn apply(&self, r0: &P<F>, r1: &P<F>) -> (P<F>, P<F>) {
@@ -93,11 +84,7 @@ impl<F: FftField> PM<F> {
 ///    Notice that `i'(k') = i'(k - deg(B[1,j+1)) = i(k) - j`,
 ///    therefore `M2 = B[1, i(k)-j+1)(R[j], R[j+1]) = B[j+1, i(k)+1)(R[0], R[1])` by (3).
 /// 6. Return `M2 * M1 = B[j+1, i(k)+1) * B[1,j+1) = B[1, i(k)+1)` by (2)
-pub fn eea<F: FftField>(
-    p: &P<F>,
-    q: &P<F>,
-    k: usize,
-) -> (PM<F>, Vec<P<F>>) {
+pub fn eea<F: FftField>(p: &P<F>, q: &P<F>, k: usize) -> (PM<F>, Vec<P<F>>) {
     let d = p.degree();
     // println!("k = {k}, deg(P) = {d}, deg(Q) = {}", q.degree());
     // assert!(d > q.degree(), "deg(P) = {d} <= {} = deg(Q)", q.degree());
@@ -115,8 +102,8 @@ pub fn eea<F: FftField>(
         let (p_t, q_t) = truncate(p, q, 1);
         debug_assert!(p_t.degree() <= 2);
         debug_assert_eq!(p_t.degree(), q_t.degree() + 1); //TODO: remove
-        // let (p_t, q_t) = (p , q);
-        let q = p_t / q_t;  //TODO: specify div
+                                                          // let (p_t, q_t) = (p , q);
+        let q = p_t / q_t; //TODO: specify div
         let minus_q = -q.clone();
         let Q = PM::quotient(minus_q); // `B[1] = B[1,2)(P, Q)`
         return (Q, vec![q]);
@@ -130,7 +117,7 @@ pub fn eea<F: FftField>(
     let (mut M1, mut qs) = eea(&p_t, &q_t, h1); // `= B[1,j+1)(P,Q), j = i(h1)`
     debug_assert!(M1.deg() <= h1);
     // let (p_t, q_t) = truncate(&p, &q, d - M1.deg());
-    let (mut p1, mut q1) = M1.apply(&p, &q);  // ` = (R[j], R[j+1])T`
+    let (mut p1, mut q1) = M1.apply(&p, &q); // ` = (R[j], R[j+1])T`
     debug_assert_eq!(p1.degree(), d - M1.deg());
     debug_assert!(q1.degree() < d - h1);
 
@@ -241,9 +228,7 @@ mod tests {
         let mut rems = Vec::with_capacity(deg_qs.len() + 2);
         rems.push(P::zero());
         rems.push(gcd.clone());
-        let qs: Vec<P> = deg_qs.iter()
-            .map(|deg_qi| P::rand(*deg_qi, rng))
-            .collect();
+        let qs: Vec<P> = deg_qs.iter().map(|deg_qi| P::rand(*deg_qi, rng)).collect();
         for (i, qi) in qs.iter().rev().enumerate() {
             // `R[i-2] = R[i] + Q[i-1]R[i-1]`
             let r2 = &rems[i] + &(qi * &rems[i + 1]);
@@ -366,7 +351,8 @@ mod tests {
 
         let d = r0.degree();
         let k = d;
-        let _t4 = start_timer!(|| format!("Generic Half-GCD, deg(r0) = {d}, 1 <= deg(qi) < 10, k = {k}"));
+        let _t4 =
+            start_timer!(|| format!("Generic Half-GCD, deg(r0) = {d}, 1 <= deg(qi) < 10, k = {k}"));
         let (B, _) = eea(r0, r1, k);
         let (gcd_, zero) = B.apply(r0, r1);
         assert_eq!(zero, P::zero());
@@ -410,5 +396,3 @@ mod tests {
         end_timer!(_t_alg_4);
     }
 }
-
-
