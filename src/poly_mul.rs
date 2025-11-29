@@ -1,7 +1,6 @@
 use crate::{Poly, P, PE};
 use ark_ff::{FftField, Field};
 use ark_poly::{EvaluationDomain, Polynomial, Radix2EvaluationDomain};
-use ark_std::{end_timer, start_timer};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FftPoly<F: FftField> {
@@ -119,7 +118,7 @@ mod tests {
     use ark_bls12_381::Fr;
     use ark_ff::One;
     use ark_poly::{DenseUVPolynomial, Polynomial};
-    use ark_std::test_rng;
+    use ark_std::{end_timer, start_timer, test_rng};
 
     #[test]
     fn test_mul_mod_z() {

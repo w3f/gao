@@ -1,6 +1,6 @@
 use crate::P;
 use ark_ff::{FftField, Zero};
-use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_poly::DenseUVPolynomial;
 
 /// For a pair of polynomials `(f, g)`, computes their greatest common divisor `gcd(f, g)`
 /// and their Bézout coefficients, i.e. a pair of polynomials `(s, t)` such that `sf + tg = gcd(f,g)`,
@@ -18,7 +18,7 @@ pub fn euclid<F: FftField>(f: &P<F>, g: &P<F>) -> (P<F>, P<F>, P<F>) {
         // todo: compute the quotient and the remainder separately
         let q = &r0 / &r1;
         // let (q1, r2) = DenseOrSparsePolynomial::divide_with_q_and_r(&r0.into(), &r1.clone().into()).unwrap();
-        assert_eq!(q.degree(), 1); // guarantees a "normal degree sequence"
+        // assert_eq!(q.degree(), 1); // guarantees a "normal degree sequence"
         let r2 = r0 - &q * &r1;
         let s2 = s0 - &q * &s1;
         let t2 = t0 - &q * &t1;

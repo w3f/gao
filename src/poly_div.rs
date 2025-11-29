@@ -18,7 +18,7 @@ fn rev<F: FftField>(k: usize, a: &P<F>) -> P<F> {
     a_rev
 }
 
-pub fn div<F: FftField>(a: &P<F>, b: &P<F>) -> (P<F>, P<F>) {
+pub fn quotient<F: FftField>(a: &P<F>, b: &P<F>) -> P<F> {
     let m = a.degree();
     let n = b.degree();
     debug_assert!(m > n);
@@ -28,7 +28,17 @@ pub fn div<F: FftField>(a: &P<F>, b: &P<F>) -> (P<F>, P<F>) {
     let rev_b_inv = inv_mod(&rev_b, l);
     let rev_q = (rev_a * rev_b_inv).mod_xk(l);
     let q = rev(l - 1, &rev_q);
-    let r = a - b * &q;
+    q
+}
+
+pub fn remainder<F: FftField>(a: &P<F>, b: &P<F>, q: &P<F>) -> P<F> {
+    let r = a - b * q;
+    r
+}
+
+pub fn div<F: FftField>(a: &P<F>, b: &P<F>) -> (P<F>, P<F>) {
+    let q = quotient(a, b);
+    let r = remainder(a, b, &q);
     (q, r)
 }
 

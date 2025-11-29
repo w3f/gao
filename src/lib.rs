@@ -132,11 +132,14 @@ impl<F: FftField> Poly<F> for P<F> {
 
 #[cfg(test)]
 mod tests {
+    use ark_bls12_381::Fr;
     use ark_ff::FftField;
     use ark_poly::univariate::DenseOrSparsePolynomial;
-    use crate::P;
 
-    pub fn ark_div<F: FftField>(p: &P<F>, q: &P<F>) -> (P<F>, P<F>) {
+    pub type P = crate::P<Fr>;
+    pub type PM = crate::poly_gcd::PM<Fr>;
+
+    pub fn ark_div<F: FftField>(p: &crate::P<F>, q: &crate::P<F>) -> (crate::P<F>, crate::P<F>) {
         let p = DenseOrSparsePolynomial::from(p);
         let q = DenseOrSparsePolynomial::from(q);
         p.divide_with_q_and_r(&q).unwrap()

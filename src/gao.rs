@@ -1,7 +1,7 @@
 use crate::half_gcd::simple_half_gcd;
 use crate::interpolation::{z_xs, Domain};
 use crate::P;
-use ark_ff::FftField;
+use ark_ff::{FftField, Zero};
 use ark_poly::Polynomial;
 use ark_poly::{DenseUVPolynomial, EvaluationDomain};
 use ark_std::{end_timer, start_timer};
@@ -105,8 +105,8 @@ pub fn decode<F: FftField>(b: &[(usize, F)], k: usize, n: usize) -> Result<P<F>,
     let _t_div =
         start_timer!(|| format!("g0 / v, deg(g0) = {}, deg(v) = {}", g0.degree(), v.degree()));
     let (h1, r) = crate::poly_div::div(&g0, v);
-    println!("{r:?}");
-    // assert!(r.is_zero());
+    // println!("{r:?}");
+    assert!(r.is_zero());
     end_timer!(_t_div);
     let f1 = &g1 + &(&h1 * u);
     assert_eq!(f1.degree(), k - 1);
@@ -125,7 +125,6 @@ mod tests {
     use ark_std::{test_rng, UniformRand};
 
     // RUST_BACKTRACE=1 cargo test gaos_decoder --release --features="print-trace" -- --show-output
-    // RAYON_NUM_THREADS=4 cargo test gaos_decoder --release --features="parallel print-trace" -- --show-output
     #[test]
     fn gaos_decoder() {
         let rng = &mut test_rng();
@@ -150,8 +149,6 @@ mod tests {
         assert_eq!(f1, f);
     }
 
-    // RAYON_NUM_THREADS=2 cargo test bench_z_s --release --features="parallel print-trace" -- --show-output // 1.262ms
-    // RAYON_NUM_THREADS=4 cargo test bench_z_s --release --features="parallel print-trace" -- --show-output // 1.131ms // 978.875µs
     #[test]
     fn bench_z_s() {
         let rng = &mut test_rng();
