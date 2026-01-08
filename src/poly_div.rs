@@ -148,6 +148,7 @@ mod tests {
     use super::*;
     use crate::Poly;
     use ark_bls12_381::Fr;
+    use ark_poly::MixedRadixEvaluationDomain;
     use ark_std::{end_timer, start_timer, test_rng};
 
     // #[test]
@@ -302,4 +303,86 @@ mod tests {
     //     let p2 = p2_over_d1.interpolate_by_ref();
     //     println!("p^2 = {p2:?}\n");
     // }
+
+    #[test]
+    fn test_domain_3n() {
+        let rng = &mut test_rng();
+
+        let log_n = 16;
+        let n = 2usize.pow(log_n);
+        let a_deg_n = P::<Fr>::rand(n, rng);
+        let b_deg_2n = P::<Fr>::rand(2 * n - 1, rng);
+
+        let domain_3n = MixedRadixEvaluationDomain::<Fr>::new(3 * n).unwrap();
+        assert_eq!(domain_3n.size(), 3 * n);
+        let domain_4n = GeneralEvaluationDomain::<Fr>::new(a_deg_n.coeffs.len() + b_deg_2n.coeffs.len() - 1).unwrap();
+        assert_eq!(domain_4n.size(), 4 * n);
+
+        let _t_3_fft = start_timer!(|| format!("3-FFT"));
+        let c = conv(domain_3n, &a_deg_n, &b_deg_2n);
+        end_timer!(_t_3_fft);
+
+        let _t_4_fft = start_timer!(|| format!("4-FFT"));
+        let c_ = conv(domain_4n, &a_deg_n, &b_deg_2n);
+        end_timer!(_t_4_fft);
+
+        assert_eq!(c, c_);
+    }
+
+    fn conv<F: FftField, D: EvaluationDomain<F>>(d: D, a: &P<F>, b: &P<F>) -> P<F> {
+        let mut a_over_d = a.evaluate_over_domain_by_ref(d);
+        let b_over_d = b.evaluate_over_domain_by_ref(d);
+        a_over_d *= &b_over_d;
+        a_over_d.interpolate()
+    }
+
+    #[test]
+    fn test_bench_hensel_lift() {
+        let rng = &mut test_rng();
+
+        let log_n = 10;
+        let n = 2usize.pow(log_n);
+        // we're lifting the inverse `mod X^n` to the inverse `mod X^2n`
+        let f = P::<Fr>::rand(2 * n - 1, rng);
+        let g1 = inv_mod(&f, n);
+        // `g1 = 1/f mod X^n`
+        assert_eq!((&f * &g1).mod_xk(n), P::one());
+
+        let domain_3n = MixedRadixEvaluationDomain::<Fr>::new(3 * n).unwrap();
+        assert_eq!(domain_3n.size(), 3 * n);
+        let _t_3n = start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n}"));
+        let g1_evals = g1.evaluate_over_domain_by_ref(domain_3n);
+        let f_evals = f.evaluate_over_domain_by_ref(domain_3n);
+        let g2_evals = &g1_evals * &g1_evals;
+        let fg2_evals = &f_evals * &g2_evals;
+        let conv_3n = fg2_evals.interpolate();
+        end_timer!(_t_3n);
+
+        let domain_4n = Radix2EvaluationDomain::<Fr>::new(4 * n).unwrap();
+        assert_eq!(domain_4n.size(), 4 * n);
+        let _t_4n = start_timer!(|| format!("4n-FFT Hensel lift, log(n) = {log_n}"));
+        let g1_evals = g1.evaluate_over_domain_by_ref(domain_4n);
+        let f_evals = f.evaluate_over_domain_by_ref(domain_4n);
+        let g2_evals = &g1_evals * &g1_evals;
+        let fg2_evals = &f_evals * &g2_evals;
+        let fg2 = fg2_evals.interpolate();
+        end_timer!(_t_4n);
+        assert_eq!(fg2.degree(), 4 * n - 3);
+        assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
+
+        let _t_mp = start_timer!(|| format!("MiddleProduct Hensel lift, log(n) = {log_n}"));
+        let g2 = hensel_lift_fft(&f, &g1, n);
+        end_timer!(_t_mp);
+
+        assert_eq!(-conv_3n.slice(n..2 * n), g2);
+    }
+    //
+    // debug_assert!(g1.degree() < n);
+    // debug_assert!(f.degree() < 2 * n);
+    // let d = GeneralEvaluationDomain::new(2 * n).unwrap();
+    // let g1 = g1.evaluate_over_domain_by_ref(d);
+    // let fg_high = middle_prod(&g1, &f);
+    // let fg = P::one() + fg_high.mul_xk(n); // f.g1 = 1 mod X^n
+    // let fg2_high = middle_prod(&g1, &fg);
+    // -fg2_high
 }
