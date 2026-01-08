@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 pub mod bezout;
+pub mod dft;
 pub mod gao;
 pub mod gcd;
 pub mod half_gcd;
