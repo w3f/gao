@@ -315,7 +315,9 @@ mod tests {
 
         let domain_3n = MixedRadixEvaluationDomain::<Fr>::new(3 * n).unwrap();
         assert_eq!(domain_3n.size(), 3 * n);
-        let domain_4n = GeneralEvaluationDomain::<Fr>::new(a_deg_n.coeffs.len() + b_deg_2n.coeffs.len() - 1).unwrap();
+        let domain_4n =
+            GeneralEvaluationDomain::<Fr>::new(a_deg_n.coeffs.len() + b_deg_2n.coeffs.len() - 1)
+                .unwrap();
         assert_eq!(domain_4n.size(), 4 * n);
 
         let _t_3_fft = start_timer!(|| format!("3-FFT"));

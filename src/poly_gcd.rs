@@ -104,7 +104,7 @@ pub fn eea<F: FftField>(p: &P<F>, q: &P<F>, k: usize) -> (PM<F>, Vec<P<F>>) {
         let (p_t, q_t) = truncate(p, q, 1);
         debug_assert!(p_t.degree() <= 2);
         debug_assert_eq!(p_t.degree(), q_t.degree() + 1); //TODO: remove
-        // let (p_t, q_t) = (p , q);
+                                                          // let (p_t, q_t) = (p , q);
         let q = p_t / q_t; //TODO: specify div
         let minus_q = -q.clone();
         let Q = PM::quotient(minus_q); // `B[1] = B[1,2)(P, Q)`
