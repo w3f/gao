@@ -176,7 +176,7 @@ pub fn truncate<F: FftField>(p: &P<F>, q: &P<F>, i: usize) -> (P<F>, P<F>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{ark_div, P, PM};
+    use crate::tests::{ark_div, P};
     use ark_bls12_381::Fr;
     use ark_poly::DenseUVPolynomial;
 
@@ -184,13 +184,13 @@ mod tests {
     use ark_std::rand::Rng;
     use ark_std::{end_timer, start_timer, test_rng};
 
-    fn check_res(B: &PM, p: &P, q: &P, k: usize) {
-        assert!(B.deg() <= k);
-        let (r1, r2) = B.apply(&p, &q);
-        assert_eq!(r1.degree(), p.degree() - B.deg());
-        let r3 = ark_div(&r1, &r2).1;
-        assert!(r3.degree() < p.degree() - k);
-    }
+    // fn check_res(B: &PM, p: &P, q: &P, k: usize) {
+    //     assert!(B.deg() <= k);
+    //     let (r1, r2) = B.apply(&p, &q);
+    //     assert_eq!(r1.degree(), p.degree() - B.deg());
+    //     let r3 = ark_div(&r1, &r2).1;
+    //     assert!(r3.degree() < p.degree() - k);
+    // }
 
     // #[test]
     // fn test_k_one() {

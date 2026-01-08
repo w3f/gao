@@ -89,7 +89,7 @@ fn middle_prod<F: FftField>(p1_over_d: &Evaluations<F>, p2: &P<F>) -> P<F> {
     p.div_xk(n2 / 2)
 }
 
-fn middle_prod2<F: FftField>(n: usize, p1: &P<F>, p2: &P<F>) -> P<F> {
+pub fn middle_prod2<F: FftField>(n: usize, p1: &P<F>, p2: &P<F>) -> P<F> {
     debug_assert!(p1.degree() < n);
     debug_assert!(p2.degree() < 2 * n);
     let d = Radix2EvaluationDomain::new(2 * n).unwrap();

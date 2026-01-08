@@ -65,7 +65,7 @@ impl<F: FftField> BezoutMatrix<F> {
     }
 }
 
-fn quotient_sequence<F: FftField>(r0: &P<F>, r1: &P<F>) -> Vec<P<F>> {
+pub fn quotient_sequence<F: FftField>(r0: &P<F>, r1: &P<F>) -> Vec<P<F>> {
     let d = r0.degree();
     let mut qs = Vec::with_capacity(d);
     let mut r0 = DenseOrSparsePolynomial::from(r0);

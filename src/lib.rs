@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
-mod bezout;
+pub mod bezout;
 pub mod gao;
-mod gcd;
+pub mod gcd;
 pub mod half_gcd;
 pub mod interpolation;
 pub mod lagrange;
@@ -137,7 +137,7 @@ mod tests {
     use ark_poly::univariate::DenseOrSparsePolynomial;
 
     pub type P = crate::P<Fr>;
-    pub type PM = crate::poly_gcd::PM<Fr>;
+    // pub type PM = crate::poly_gcd::PM<Fr>;
 
     pub fn ark_div<F: FftField>(p: &crate::P<F>, q: &crate::P<F>) -> (crate::P<F>, crate::P<F>) {
         let p = DenseOrSparsePolynomial::from(p);
