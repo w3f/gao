@@ -94,17 +94,8 @@ mod tests {
 
         let _t_fft = start_timer!(|| format!("3n-FFT, n = {n}"));
         let _t_precomp = start_timer!(|| format!("pre-computation"));
-        let fft_domain = {
-            let _t_precomp = start_timer!(|| format!("pre-computation"));
-            let w = Fr::get_root_of_unity(m as u64).unwrap();
-            let d_3 = Radix3::new().unwrap();
-            debug_assert_eq!(d_3.w(), w.pow([n as u64]));
-            let d_n = Radix2EvaluationDomain::new(n).unwrap();
-            debug_assert_eq!(d_n.w(), w.pow([3]));
-            let fft_domain = CooleyTukeyDomain::new(w, d_3, d_n);
-            end_timer!(_t_precomp);
-            fft_domain
-        };
+        let fft_domain = domain_3x2n(n);
+        end_timer!(_t_precomp);
         let _t_comp = start_timer!(|| format!("computation"));
         let fft = fft_domain.dft(&coeffs);
         end_timer!(_t_comp);
@@ -120,5 +111,16 @@ mod tests {
         end_timer!(_t_fft);
 
         assert_eq!(fft, fft_);
+    }
+
+    pub fn domain_3x2n<F: FftField>(n: usize) -> CooleyTukeyDomain<F, Radix3<F>, Radix2EvaluationDomain<F>> {
+        let m = 3 * n;
+        let w = F::get_root_of_unity(m as u64).unwrap();
+        let d_3 = Radix3::new().unwrap();
+        debug_assert_eq!(d_3.w(), w.pow([n as u64]));
+        let d_n = Radix2EvaluationDomain::new(n).unwrap();
+        debug_assert_eq!(d_n.w(), w.pow([3]));
+        let fft_domain = CooleyTukeyDomain::new(w, d_3, d_n);
+        fft_domain
     }
 }
