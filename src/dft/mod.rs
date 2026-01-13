@@ -10,6 +10,21 @@ pub trait DftDomain<F: Field> {
     fn idft(&self, evals: &[F]) -> Vec<F>;
     fn n(&self) -> usize;
     fn w(&self) -> F;
+
+
+}
+
+pub fn roots<F: Field>(n: usize, w: F) -> Vec<F> {
+    debug_assert!(w.pow([n as u64]).is_one());
+    let mut roots = Vec::with_capacity(n);
+    roots.push(F::one());
+    roots.push(w);
+    let mut wi = w;
+    for _ in 2..n {
+        wi *= w;
+        roots.push(wi);
+    }
+    roots
 }
 
 impl<F: FftField> DftDomain<F> for Radix2EvaluationDomain<F> {
