@@ -1,6 +1,9 @@
-use crate::dft::{roots, DftDomain};
-use ark_ff::Field;
+use crate::dft::radix3::Radix3;
+use crate::dft::{roots, transpose, DftDomain};
+use ark_ff::{FftField, Field};
+use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 
+#[derive(Debug, PartialEq)]
 pub struct CooleyTukeyDomain<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> {
     n: usize,
     w: F,
@@ -14,6 +17,18 @@ impl<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> CooleyTukeyDomain<F, D1, D2> 
         let (n1, n2) = (d1.n(), d2.n());
         let n = n1 * n2;
         debug_assert!(w.pow([n as u64]).is_one());
+        let twiddles = Self::twiddles(w, n1, n2);
+
+        Self {
+            n,
+            w,
+            d1,
+            d2,
+            twiddles,
+        }
+    }
+
+    fn twiddles(w: F, n1: usize, n2: usize) -> Vec<Vec<F>> {
         let roots = roots((n1 - 1) * (n2 - 1) + 1, w);
         let mut twiddles = vec![vec![F::zero(); n1]; n2];
         for i2 in 0..n2 {
@@ -23,14 +38,35 @@ impl<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> CooleyTukeyDomain<F, D1, D2> 
             }
             twiddles[i2] = inner;
         }
+        twiddles
+    }
+}
 
-        Self {
-            n,
-            w,
-            d1,
-            d2,
-            twiddles,
-        }
+/// Domain of size `3·2^k`.
+pub fn radix_3x2k<F: FftField>(
+    k: usize,
+) -> CooleyTukeyDomain<F, Radix3<F>, Radix2EvaluationDomain<F>> {
+    let m = 1 << k;
+    let n = 3 * m;
+    let w = F::get_root_of_unity(n as u64).unwrap();
+    let d_3 = Radix3::new().unwrap();
+    let d_2k = Radix2EvaluationDomain::new(m).unwrap();
+    debug_assert_eq!(d_3.w(), w.pow([m as u64]));
+    debug_assert_eq!(d_2k.w(), w.pow([3]));
+    let roots = roots(m, w);
+    let roots_2 = roots
+        .iter()
+        .copied()
+        .step_by(2)
+        .chain(roots.iter().skip(m / 2).map(|&f| f * f))
+        .collect();
+    let twiddles = transpose(&[vec![F::one(); m], roots, roots_2]);
+    CooleyTukeyDomain {
+        n,
+        w,
+        d1: d_3,
+        d2: d_2k,
+        twiddles,
     }
 }
 
@@ -76,10 +112,23 @@ mod tests {
     use super::*;
 
     use crate::dft::radix3::Radix3;
+    use crate::dft::tests::dft_idft_roundtrip;
     use ark_bls12_381::Fr;
     use ark_ff::{FftField, UniformRand};
     use ark_poly::{EvaluationDomain, MixedRadixEvaluationDomain, Radix2EvaluationDomain};
     use ark_std::{end_timer, start_timer, test_rng};
+
+    #[test]
+    fn test_3x2k_domain() {
+        let log_n = 8;
+        let n = 1 << log_n;
+
+        let d = radix_3x2k::<Fr>(log_n);
+        let d_ = domain_3x2n(n);
+        assert_eq!(d, d_);
+
+        dft_idft_roundtrip(d);
+    }
 
     #[test]
     fn test_3n_fft() {
@@ -88,9 +137,7 @@ mod tests {
         let log_n = 10;
         let n = 1 << log_n;
         let m = 3 * n;
-        let coeffs: Vec<_> = (0..m)
-            .map(|_| Fr::rand(rng))
-            .collect();
+        let coeffs: Vec<_> = (0..m).map(|_| Fr::rand(rng)).collect();
 
         let _t_arkworks = start_timer!(|| format!("Arkworks 3n-FFT, n = {n}"));
         let _t_precomp = start_timer!(|| format!("pre-computation"));
@@ -107,7 +154,7 @@ mod tests {
 
         let _t_custom = start_timer!(|| format!("Custom 3n-FFT, n = {n}"));
         let _t_precomp = start_timer!(|| format!("pre-computation"));
-        let fft_domain = domain_3x2n(n);
+        let fft_domain = radix_3x2k(log_n);
         end_timer!(_t_precomp);
         let _t_fft = start_timer!(|| format!("forward FFT"));
         let evals = fft_domain.dft(&coeffs);
@@ -120,7 +167,9 @@ mod tests {
         assert_eq!(coeffs_, coeffs);
     }
 
-    pub fn domain_3x2n<F: FftField>(n: usize) -> CooleyTukeyDomain<F, Radix3<F>, Radix2EvaluationDomain<F>> {
+    pub fn domain_3x2n<F: FftField>(
+        n: usize,
+    ) -> CooleyTukeyDomain<F, Radix3<F>, Radix2EvaluationDomain<F>> {
         let m = 3 * n;
         let w = F::get_root_of_unity(m as u64).unwrap();
         let d_3 = Radix3::new().unwrap();

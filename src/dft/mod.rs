@@ -24,9 +24,7 @@ pub trait DftDomain<F: Field> {
         let n_inv = self.n_inv();
         let mut dft = self.dft(evals);
         dft[1..].reverse();
-        dft.into_iter()
-            .map(|c| c * n_inv)
-            .collect()
+        dft.into_iter().map(|c| c * n_inv).collect()
     }
 }
 
@@ -40,6 +38,13 @@ pub fn roots<F: Field>(n: usize, w: F) -> Vec<F> {
         roots.push(wi);
     }
     roots
+}
+
+pub fn transpose<F: Copy>(rows: &[Vec<F>]) -> Vec<Vec<F>> {
+    let n_cols = rows[0].len();
+    (0..n_cols)
+        .map(|j| rows.iter().map(|m_i| m_i[j]).collect())
+        .collect()
 }
 
 impl<F: FftField> DftDomain<F> for Radix2EvaluationDomain<F> {
@@ -68,9 +73,7 @@ pub mod tests {
     pub fn dft_idft_roundtrip<F: Field, D: DftDomain<F>>(d: D) {
         let rng = &mut test_rng();
 
-        let coeffs: Vec<_> = (0..d.n())
-            .map(|_| F::rand(rng))
-            .collect();
+        let coeffs: Vec<_> = (0..d.n()).map(|_| F::rand(rng)).collect();
 
         let evals = d.dft(&coeffs);
         let coeffs_ = d.idft(&evals);

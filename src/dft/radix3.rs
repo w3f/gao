@@ -6,6 +6,7 @@ use ark_ff::{FftField, Field};
 /// Assumes:
 /// - char(F) ≠ 2,3
 /// - F contains a primitive 3rd root of unity
+#[derive(Debug, PartialEq)]
 pub struct Radix3<F: Field> {
     omega: F,
     inv_2: F,  // 1/2
@@ -79,12 +80,12 @@ impl<F: FftField> DftDomain<F> for Radix3<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dft::tests::dft_idft_roundtrip;
     use ark_bls12_381::Fr;
     use ark_ff::UniformRand;
     use ark_poly::EvaluationDomain;
     use ark_poly::MixedRadixEvaluationDomain;
     use ark_std::test_rng;
-    use crate::dft::tests::dft_idft_roundtrip;
 
     #[test]
     fn radix3_dft_idft_roundtrip() {
