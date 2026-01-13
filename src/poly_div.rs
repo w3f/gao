@@ -146,13 +146,13 @@ pub fn half_mul_mod<F: FftField>(a: &P<F>, b: &P<F>, l2: usize) -> P<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dft::composite::radix_3x2k;
+    use crate::dft::DftDomain;
     use crate::Poly;
     use ark_bls12_381::Fr;
     use ark_ff::Zero;
     use ark_poly::MixedRadixEvaluationDomain;
     use ark_std::{end_timer, start_timer, test_rng};
-    use crate::dft::composite::radix_3x2k;
-    use crate::dft::DftDomain;
     // #[test]
     // fn test_rem() {
     //     let rng = &mut test_rng();
@@ -368,7 +368,8 @@ mod tests {
         end_timer!(_t_mp);
         assert_eq!(g2, -fg2.slice(n..2 * n));
 
-        let _t_3n_arkworks = start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n} (arkworks)"));
+        let _t_3n_arkworks =
+            start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n} (arkworks)"));
         let domain_3n = MixedRadixEvaluationDomain::<Fr>::new(3 * n).unwrap();
         debug_assert_eq!(domain_3n.size(), 3 * n);
         let g1_evals = g1.evaluate_over_domain_by_ref(domain_3n);
@@ -379,7 +380,8 @@ mod tests {
         end_timer!(_t_3n_arkworks);
         assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
 
-        let _t_3n_custom = start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n} (custom)"));
+        let _t_3n_custom =
+            start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n} (custom)"));
         let domain_3n = radix_3x2k(log_n as usize);
         debug_assert_eq!(domain_3n.n(), 3 * n);
         let mut g1_coeffs = g1.coeffs;
@@ -388,8 +390,11 @@ mod tests {
         f_coeffs.resize(3 * n, Fr::zero());
         let g1_evals = domain_3n.dft(&g1_coeffs);
         let f_evals = domain_3n.dft(&f_coeffs);
-        let fg2_evals: Vec<Fr> = g1_evals.iter()
-            .zip(f_evals.iter()).map(|(g, f)| g * g * f).collect();
+        let fg2_evals: Vec<Fr> = g1_evals
+            .iter()
+            .zip(f_evals.iter())
+            .map(|(g, f)| g * g * f)
+            .collect();
         let conv_3n = P::from_coefficients_vec(domain_3n.idft(&fg2_evals));
         end_timer!(_t_3n_custom);
         assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
