@@ -60,10 +60,6 @@ impl<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> DftDomain<F> for CooleyTukeyD
         res
     }
 
-    fn idft(&self, _evals: &[F]) -> Vec<F> {
-        todo!()
-    }
-
     fn n(&self) -> usize {
         self.n
     }
@@ -90,27 +86,36 @@ mod tests {
         let log_n = 10;
         let n = 1 << log_n;
         let m = 3 * n;
-        let coeffs: Vec<_> = (0..m).map(|_| Fr::rand(rng)).collect();
+        let coeffs: Vec<_> = (0..m)
+            .map(|_| Fr::rand(rng))
+            .collect();
 
-        let _t_fft = start_timer!(|| format!("3n-FFT, n = {n}"));
-        let _t_precomp = start_timer!(|| format!("pre-computation"));
-        let fft_domain = domain_3x2n(n);
-        end_timer!(_t_precomp);
-        let _t_comp = start_timer!(|| format!("computation"));
-        let fft = fft_domain.dft(&coeffs);
-        end_timer!(_t_comp);
-        end_timer!(_t_fft);
-
-        let _t_fft = start_timer!(|| format!("Arkworks 3n-FFT, n = {n}"));
+        let _t_arkworks = start_timer!(|| format!("Arkworks 3n-FFT, n = {n}"));
         let _t_precomp = start_timer!(|| format!("pre-computation"));
         let fft_domain = MixedRadixEvaluationDomain::<Fr>::new(m).unwrap();
         end_timer!(_t_precomp);
-        let _t_comp = start_timer!(|| format!("computation"));
-        let fft_ = fft_domain.fft(&coeffs);
-        end_timer!(_t_comp);
+        let _t_fft = start_timer!(|| format!("forward FFT"));
+        let evals = fft_domain.fft(&coeffs);
         end_timer!(_t_fft);
+        let _t_ifft = start_timer!(|| format!("inverse FFT"));
+        let coeffs_ = fft_domain.ifft(&evals);
+        end_timer!(_t_ifft);
+        end_timer!(_t_arkworks);
+        assert_eq!(coeffs_, coeffs);
 
-        assert_eq!(fft, fft_);
+        let _t_custom = start_timer!(|| format!("Custom 3n-FFT, n = {n}"));
+        let _t_precomp = start_timer!(|| format!("pre-computation"));
+        let fft_domain = domain_3x2n(n);
+        end_timer!(_t_precomp);
+        let _t_fft = start_timer!(|| format!("forward FFT"));
+        let evals = fft_domain.dft(&coeffs);
+        end_timer!(_t_fft);
+        let _t_ifft = start_timer!(|| format!("inverse FFT"));
+        let coeffs_ = fft_domain.idft(&evals);
+        end_timer!(_t_ifft);
+        end_timer!(_t_custom);
+        println!("\n");
+        assert_eq!(coeffs_, coeffs);
     }
 
     pub fn domain_3x2n<F: FftField>(n: usize) -> CooleyTukeyDomain<F, Radix3<F>, Radix2EvaluationDomain<F>> {

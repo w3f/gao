@@ -55,11 +55,6 @@ impl<F: FftField> Radix3<F> {
         let t = self.half_c * b;
         [x[0] + a, s + t, s - t]
     }
-
-    fn idft3(&self, x: [F; 3]) -> [F; 3] {
-        let y = self.dft3(x);
-        [y[0], y[2], y[1]]
-    }
 }
 
 impl<F: FftField> DftDomain<F> for Radix3<F> {
@@ -68,17 +63,12 @@ impl<F: FftField> DftDomain<F> for Radix3<F> {
         self.dft3([coeffs[0], coeffs[1], coeffs[2]]).to_vec()
     }
 
-    // IFFT(x) = (1/n) · FFT_{ω⁻¹}(x)
-    // For n = 3, FFT_{ω⁻¹}(x) = [y0, y2, y1], where y = FFT_ω(x).
-    fn idft(&self, evals: &[F]) -> Vec<F> {
-        self.idft3([evals[0], evals[1], evals[2]])
-            .into_iter()
-            .map(|c| c * self.inv_3)
-            .collect()
-    }
-
     fn n(&self) -> usize {
         3
+    }
+
+    fn n_inv(&self) -> F {
+        self.inv_3
     }
 
     fn w(&self) -> F {
@@ -94,18 +84,12 @@ mod tests {
     use ark_poly::EvaluationDomain;
     use ark_poly::MixedRadixEvaluationDomain;
     use ark_std::test_rng;
+    use crate::dft::tests::dft_idft_roundtrip;
+
     #[test]
     fn radix3_dft_idft_roundtrip() {
-        let rng = &mut test_rng();
-
-        let n = 3;
         let d3 = Radix3::<Fr>::new().unwrap();
-        let x: Vec<_> = (0..n).map(|_| Fr::rand(rng)).collect();
-
-        let x_dft = d3.dft(&x);
-        let x_ = d3.idft(&x_dft);
-
-        assert_eq!(x, x_);
+        dft_idft_roundtrip(d3);
     }
 
     #[test]
