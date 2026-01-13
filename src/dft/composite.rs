@@ -11,12 +11,14 @@ pub struct CooleyTukeyDomain<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> {
 
 impl<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> CooleyTukeyDomain<F, D1, D2> {
     pub fn new(w: F, d1: D1, d2: D2) -> Self {
-        let n = d1.n() * d2.n();
-        let roots = roots(n ,w);
-        let mut twiddles = vec![vec![F::zero(); d1.n()]; d2.n()];
-        for i2 in 0..d2.n() {
-            let mut inner = vec![F::zero(); d1.n()];
-            for k1 in 0..d1.n() {
+        let (n1, n2) = (d1.n(), d2.n());
+        let n = n1 * n2;
+        debug_assert!(w.pow([n as u64]).is_one());
+        let roots = roots((n1 - 1) * (n2 - 1) + 1, w);
+        let mut twiddles = vec![vec![F::zero(); n1]; n2];
+        for i2 in 0..n2 {
+            let mut inner = vec![F::zero(); n1];
+            for k1 in 0..n1 {
                 inner[k1] = roots[k1 * i2];
             }
             twiddles[i2] = inner;

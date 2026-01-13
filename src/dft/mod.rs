@@ -31,7 +31,6 @@ pub trait DftDomain<F: Field> {
 }
 
 pub fn roots<F: Field>(n: usize, w: F) -> Vec<F> {
-    debug_assert!(w.pow([n as u64]).is_one());
     let mut roots = Vec::with_capacity(n);
     roots.push(F::one());
     roots.push(w);
