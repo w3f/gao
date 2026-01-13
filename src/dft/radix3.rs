@@ -48,26 +48,33 @@ impl<F: FftField> Radix3<F> {
     ///   X2 = (x0 − 1/2.a) − (c/2)·b = s - t
     ///
     /// Cost: exactly 2 field multiplications.
-    fn fft3(&self, x: [F; 3]) -> [F; 3] {
+    fn dft3(&self, x: [F; 3]) -> [F; 3] {
         let a = x[1] + x[2];
         let b = x[1] - x[2];
         let s = x[0] - a * self.inv_2;
         let t = self.half_c * b;
         [x[0] + a, s + t, s - t]
     }
+
+    fn idft3(&self, x: [F; 3]) -> [F; 3] {
+        let y = self.dft3(x);
+        [y[0], y[2], y[1]]
+    }
 }
 
 impl<F: FftField> DftDomain<F> for Radix3<F> {
     fn dft(&self, coeffs: &[F]) -> Vec<F> {
         assert_eq!(coeffs.len(), 3);
-        self.fft3([coeffs[0], coeffs[1], coeffs[2]]).to_vec()
+        self.dft3([coeffs[0], coeffs[1], coeffs[2]]).to_vec()
     }
 
     // IFFT(x) = (1/n) · FFT_{ω⁻¹}(x)
     // For n = 3, FFT_{ω⁻¹}(x) = [y0, y2, y1], where y = FFT_ω(x).
     fn idft(&self, evals: &[F]) -> Vec<F> {
-        let y = self.dft(evals);
-        vec![y[0] * self.inv_3, y[2] * self.inv_3, y[1] * self.inv_3]
+        self.idft3([evals[0], evals[1], evals[2]])
+            .into_iter()
+            .map(|c| c * self.inv_3)
+            .collect()
     }
 
     fn n(&self) -> usize {
