@@ -148,9 +148,11 @@ mod tests {
     use super::*;
     use crate::Poly;
     use ark_bls12_381::Fr;
+    use ark_ff::Zero;
     use ark_poly::MixedRadixEvaluationDomain;
     use ark_std::{end_timer, start_timer, test_rng};
-
+    use crate::dft::composite::radix_3x2k;
+    use crate::dft::DftDomain;
     // #[test]
     // fn test_rem() {
     //     let rng = &mut test_rng();
@@ -350,19 +352,9 @@ mod tests {
         // `g1 = 1/f mod X^n`
         assert_eq!((&f * &g1).mod_xk(n), P::one());
 
-        let domain_3n = MixedRadixEvaluationDomain::<Fr>::new(3 * n).unwrap();
-        assert_eq!(domain_3n.size(), 3 * n);
-        let _t_3n = start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n}"));
-        let g1_evals = g1.evaluate_over_domain_by_ref(domain_3n);
-        let f_evals = f.evaluate_over_domain_by_ref(domain_3n);
-        let g2_evals = &g1_evals * &g1_evals;
-        let fg2_evals = &f_evals * &g2_evals;
-        let conv_3n = fg2_evals.interpolate();
-        end_timer!(_t_3n);
-
-        let domain_4n = Radix2EvaluationDomain::<Fr>::new(4 * n).unwrap();
-        assert_eq!(domain_4n.size(), 4 * n);
         let _t_4n = start_timer!(|| format!("4n-FFT Hensel lift, log(n) = {log_n}"));
+        let domain_4n = Radix2EvaluationDomain::<Fr>::new(4 * n).unwrap();
+        debug_assert_eq!(domain_4n.size(), 4 * n);
         let g1_evals = g1.evaluate_over_domain_by_ref(domain_4n);
         let f_evals = f.evaluate_over_domain_by_ref(domain_4n);
         let g2_evals = &g1_evals * &g1_evals;
@@ -370,21 +362,36 @@ mod tests {
         let fg2 = fg2_evals.interpolate();
         end_timer!(_t_4n);
         assert_eq!(fg2.degree(), 4 * n - 3);
-        assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
 
         let _t_mp = start_timer!(|| format!("MiddleProduct Hensel lift, log(n) = {log_n}"));
         let g2 = hensel_lift_fft(&f, &g1, n);
         end_timer!(_t_mp);
+        assert_eq!(g2, -fg2.slice(n..2 * n));
 
-        assert_eq!(-conv_3n.slice(n..2 * n), g2);
+        let _t_3n_arkworks = start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n} (arkworks)"));
+        let domain_3n = MixedRadixEvaluationDomain::<Fr>::new(3 * n).unwrap();
+        debug_assert_eq!(domain_3n.size(), 3 * n);
+        let g1_evals = g1.evaluate_over_domain_by_ref(domain_3n);
+        let f_evals = f.evaluate_over_domain_by_ref(domain_3n);
+        let g2_evals = &g1_evals * &g1_evals;
+        let fg2_evals = &f_evals * &g2_evals;
+        let conv_3n = fg2_evals.interpolate();
+        end_timer!(_t_3n_arkworks);
+        assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
+
+        let _t_3n_custom = start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n} (custom)"));
+        let domain_3n = radix_3x2k(log_n as usize);
+        debug_assert_eq!(domain_3n.n(), 3 * n);
+        let mut g1_coeffs = g1.coeffs;
+        let mut f_coeffs = f.coeffs;
+        g1_coeffs.resize(3 * n, Fr::zero());
+        f_coeffs.resize(3 * n, Fr::zero());
+        let g1_evals = domain_3n.dft(&g1_coeffs);
+        let f_evals = domain_3n.dft(&f_coeffs);
+        let fg2_evals: Vec<Fr> = g1_evals.iter()
+            .zip(f_evals.iter()).map(|(g, f)| g * g * f).collect();
+        let conv_3n = P::from_coefficients_vec(domain_3n.idft(&fg2_evals));
+        end_timer!(_t_3n_custom);
+        assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
     }
-    //
-    // debug_assert!(g1.degree() < n);
-    // debug_assert!(f.degree() < 2 * n);
-    // let d = GeneralEvaluationDomain::new(2 * n).unwrap();
-    // let g1 = g1.evaluate_over_domain_by_ref(d);
-    // let fg_high = middle_prod(&g1, &f);
-    // let fg = P::one() + fg_high.mul_xk(n); // f.g1 = 1 mod X^n
-    // let fg2_high = middle_prod(&g1, &fg);
-    // -fg2_high
 }
