@@ -2,6 +2,7 @@ use crate::dft::radix3::Radix3;
 use crate::dft::{roots, transpose, DftDomain};
 use ark_ff::{FftField, Field};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
+use ark_std::{end_timer, start_timer};
 
 #[derive(Debug, PartialEq)]
 pub struct CooleyTukeyDomain<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> {
@@ -77,12 +78,15 @@ impl<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> DftDomain<F> for CooleyTukeyD
         let n2 = self.d2.n();
         debug_assert_eq!(coeffs.len(), n);
 
+        let _t_dft = start_timer!(|| format!("{n1}n-DFT, n = {n2}"));
+        let _t_inner_dfts = start_timer!(|| format!("{n1} x n-DFT, n = {n2}"));
         let mut inner_dfts = vec![vec![F::zero(); n2]; n1];
         for k1 in 0..n1 {
             let inner_coeffs: Vec<_> = coeffs.iter().cloned().skip(k1).step_by(n1).collect();
             debug_assert_eq!(inner_coeffs.len(), n2);
             inner_dfts[k1] = self.d2.dft(&inner_coeffs);
         }
+        end_timer!(_t_inner_dfts);
 
         let mut res = vec![F::zero(); n];
         for i2 in 0..n2 {
@@ -95,6 +99,7 @@ impl<F: Field, D1: DftDomain<F>, D2: DftDomain<F>> DftDomain<F> for CooleyTukeyD
                 res[i1 * n2 + i2] = outer_dft[i1];
             }
         }
+        end_timer!(_t_dft);
         res
     }
 
