@@ -2,7 +2,7 @@ use crate::dft::{roots, DftDomain};
 use ark_ff::{FftField, Field};
 
 pub struct Radix2k<F: Field> {
-    ws: Vec<F>,
+    pub ws: Vec<F>,
 }
 
 impl<F: FftField> Radix2k<F> {
@@ -19,7 +19,7 @@ impl<F: Field> Radix2k<F> {
         Self { ws }
     }
 
-    fn dft_in_place_dif(&self, f: &mut [F]) {
+    pub fn dft_in_place_dif(&self, f: &mut [F]) {
         let n = f.len();
         debug_assert_eq!(self.ws.len(), n);
         let mut m = n;
@@ -42,7 +42,7 @@ impl<F: Field> Radix2k<F> {
         }
     }
 
-    fn dft_in_place_dit(&self, f: &mut [F], ws: &[F]) {
+    pub fn dft_in_place_dit(&self, f: &mut [F], ws: &[F]) {
         let n = f.len();
         debug_assert_eq!(ws.len(), n);
         let mut m = 2;
@@ -65,7 +65,7 @@ impl<F: Field> Radix2k<F> {
         }
     }
 
-    fn dft_rec(&self, f: &[F]) -> Vec<F> {
+    pub fn dft_rec(&self, f: &[F]) -> Vec<F> {
         self._dft_rec(f, 1)
     }
 
@@ -134,17 +134,17 @@ pub fn bitreverse<F: Field>(f: &mut [F]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dft::tests::dft_idft_roundtrip;
     use ark_bls12_381::Fr;
     use ark_poly::EvaluationDomain;
     use ark_poly::Radix2EvaluationDomain;
     use ark_std::{end_timer, start_timer, test_rng, UniformRand};
-    use crate::dft::tests::dft_idft_roundtrip;
 
     #[test]
     fn test_2k_fft() {
         let rng = &mut test_rng();
 
-        let log_n = 2;
+        let log_n = 8;
         let n = 1 << log_n;
 
         let d = Radix2k::<Fr>::new(n).unwrap();

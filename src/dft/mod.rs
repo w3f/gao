@@ -1,7 +1,8 @@
 pub mod composite;
 pub mod naive;
-mod radix2k;
-pub mod radix3;
+pub mod radix_2k;
+pub mod radix_3;
+pub mod radix_3_2k;
 
 use ark_ff::{FftField, Field};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};

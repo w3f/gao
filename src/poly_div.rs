@@ -146,7 +146,7 @@ pub fn half_mul_mod<F: FftField>(a: &P<F>, b: &P<F>, l2: usize) -> P<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dft::composite::radix_3x2k;
+    use crate::dft::radix_3_2k::Radix3_2k;
     use crate::dft::DftDomain;
     use crate::Poly;
     use ark_bls12_381::Fr;
@@ -361,11 +361,13 @@ mod tests {
         let fg2_evals = &f_evals * &g2_evals;
         let fg2 = fg2_evals.interpolate();
         end_timer!(_t_4n);
+        println!();
         assert_eq!(fg2.degree(), 4 * n - 3);
 
         let _t_mp = start_timer!(|| format!("MiddleProduct Hensel lift, log(n) = {log_n}"));
         let g2 = hensel_lift_fft(&f, &g1, n);
         end_timer!(_t_mp);
+        println!();
         assert_eq!(g2, -fg2.slice(n..2 * n));
 
         let _t_3n_arkworks =
@@ -378,11 +380,12 @@ mod tests {
         let fg2_evals = &f_evals * &g2_evals;
         let conv_3n = fg2_evals.interpolate();
         end_timer!(_t_3n_arkworks);
+        println!();
         assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
 
         let _t_3n_custom =
             start_timer!(|| format!("3n-FFT Hensel lift, log(n) = {log_n} (custom)"));
-        let domain_3n = radix_3x2k(log_n as usize);
+        let domain_3n = Radix3_2k::new(log_n as usize).unwrap();
         debug_assert_eq!(domain_3n.n(), 3 * n);
         let mut g1_coeffs = g1.coeffs;
         let mut f_coeffs = f.coeffs;
@@ -397,6 +400,7 @@ mod tests {
             .collect();
         let conv_3n = P::from_coefficients_vec(domain_3n.idft(&fg2_evals));
         end_timer!(_t_3n_custom);
+        println!();
         assert_eq!(conv_3n.slice(n..2 * n), fg2.slice(n..2 * n));
     }
 }
