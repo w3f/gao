@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn radix3_dft_idft_roundtrip() {
         let d3 = Radix3::<Fr>::new().unwrap();
-        dft_idft_roundtrip(d3);
+        dft_idft_roundtrip(&d3);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 pub mod composite;
 pub mod naive;
+mod radix2k;
 pub mod radix3;
 
 use ark_ff::{FftField, Field};
@@ -21,10 +22,15 @@ pub trait DftDomain<F: Field> {
     //
     // IFFT(x) = (1/n)·FFT_{ω^{-1}}(x)
     fn idft(&self, evals: &[F]) -> Vec<F> {
+        let mut coeffs = self.dft(evals);
+        coeffs[1..].reverse();
+        self.normalize(&mut coeffs);
+        coeffs
+    }
+
+    fn normalize(&self, coeffs: &mut [F]) {
         let n_inv = self.n_inv();
-        let mut dft = self.dft(evals);
-        dft[1..].reverse();
-        dft.into_iter().map(|c| c * n_inv).collect()
+        coeffs.into_iter().for_each(|c| *c *= n_inv);
     }
 }
 
@@ -70,7 +76,7 @@ pub mod tests {
     use super::*;
     use ark_std::test_rng;
 
-    pub fn dft_idft_roundtrip<F: Field, D: DftDomain<F>>(d: D) {
+    pub fn dft_idft_roundtrip<F: Field, D: DftDomain<F>>(d: &D) {
         let rng = &mut test_rng();
 
         let coeffs: Vec<_> = (0..d.n()).map(|_| F::rand(rng)).collect();

@@ -132,7 +132,7 @@ mod tests {
         let d_ = domain_3x2n(n);
         assert_eq!(d, d_);
 
-        dft_idft_roundtrip(d);
+        dft_idft_roundtrip(&d);
     }
 
     #[test]
